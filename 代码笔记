@@ -1,0 +1,933 @@
+Navigator::task_main()//Navigator逻辑整理
+{
+	bool have_geofence_position_data = false;
+
+	/* Try to load the geofence:尝试加载geofence文件（电子围栏）
+	 * if /fs/microsd/etc/geofence.txt load from this file如果在路径中存在则加载
+	 * else clear geofence data in datamanager否者清除datamanager内的文件 */
+	struct stat buffer;
+
+	if (stat(GEOFENCE_FILENAME, &buffer) == 0) {
+		warnx("Try to load geofence.txt");
+		_geofence.loadFromFile(GEOFENCE_FILENAME);、//尝试读取文件
+
+	} else {
+		if (_geofence.clearDm() != OK) {//如果文件不存在，调用此函数_geofence.clearDm()清除dataman中文件
+			mavlink_log_critical(&_mavlink_log_pub, "failed clearing geofence");
+		}
+	}
+
+	/* do subscriptions 订阅12参数
+	ORB_ID:                       XXX_sub:
+	    vehicle_global_position       _global_pos_sub
+	    vehicle_gps_position          ...
+	    sensor_combined               ...
+	    fw_pos_ctrl_status            ...
+	    vehicle_status                ...
+	    vehicle_land_detected         ...
+	    vehicle_control_mode
+	    home_position
+	    onboard_mission
+	    offboard_mission
+	    parameter_update
+	    vehicle_command
+	*/
+	_global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
+	_gps_pos_sub = orb_subscribe(ORB_ID(vehicle_gps_position));
+	_sensor_combined_sub = orb_subscribe(ORB_ID(sensor_combined));
+	_fw_pos_ctrl_status_sub = orb_subscribe(ORB_ID(fw_pos_ctrl_status));
+	_vstatus_sub = orb_subscribe(ORB_ID(vehicle_status));
+	_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
+	_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
+	_home_pos_sub = orb_subscribe(ORB_ID(home_position));
+	_onboard_mission_sub = orb_subscribe(ORB_ID(onboard_mission));
+	_offboard_mission_sub = orb_subscribe(ORB_ID(offboard_mission));
+	_param_update_sub = orb_subscribe(ORB_ID(parameter_update));
+	_vehicle_command_sub = orb_subscribe(ORB_ID(vehicle_command));
+	
+	/* copy all topics first time 第一时间更新参数   
+	   更新9项     
+	   onboard_mission
+	   offboard_mission
+	   fw_pos_ctrl_status    未更新
+	*/
+		
+	vehicle_status_update();
+	vehicle_land_detected_update();
+	vehicle_control_mode_update();
+	global_position_update();
+	gps_position_update();
+	sensor_combined_update();
+	home_position_update(true);
+	fw_pos_ctrl_status_update();
+	params_update();
+	
+	//功能未知的结构体
+	/* wakeup source(s) */
+	px4_pollfd_struct_t fds[2] = {};
+
+	/* Setup of loop */
+	fds[0].fd = _global_pos_sub;
+	fds[0].events = POLLIN;
+	fds[1].fd = _vehicle_command_sub;
+	fds[1].events = POLLIN;
+	
+	//循环！！！！！！！！！！！！！！！！前方高能
+	
+	
+	bool global_pos_available_once = false;
+
+	while (!_task_should_exit) {
+
+		/* wait for up to 200ms for data */
+		int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 1000);//px4_poll?????????????????????????
+
+		if (pret == 0) {
+			/* timed out - periodic check for _task_should_exit, etc. */
+			if (global_pos_available_once) {
+				global_pos_available_once = false;
+				PX4_WARN("navigator: global position timeout");
+			}
+			/* Let the loop run anyway, don't do `continue` here. */
+
+		} else if (pret < 0) {
+			/* this is undesirable but not much we can do - might want to flag unhappy status */
+			PX4_WARN("nav: poll error %d, %d", pret, errno);
+			continue;
+		} else {
+			/* success, global pos was available */
+			global_pos_available_once = true;
+		}
+
+		perf_begin(_loop_perf);//???????????????????????????????????????
+
+		bool updated;
+
+		/* gps updated */
+		orb_check(_gps_pos_sub, &updated);
+		if (updated) {
+			gps_position_update();
+			if (_geofence.getSource() == Geofence::GF_SOURCE_GPS) {
+				have_geofence_position_data = true;
+			}
+		}
+
+		/* sensors combined updated */
+		orb_check(_sensor_combined_sub, &updated);
+		if (updated) {
+			sensor_combined_update();
+		}
+
+		/* parameters updated */
+		orb_check(_param_update_sub, &updated);
+		if (updated) {
+			params_update();
+			updateParams();
+		}
+
+		/* vehicle control mode updated */
+		orb_check(_control_mode_sub, &updated);
+		if (updated) {
+			vehicle_control_mode_update();
+		}
+
+		/* vehicle status updated */
+		orb_check(_vstatus_sub, &updated);
+		if (updated) {
+			vehicle_status_update();
+		}
+
+		/* vehicle land detected updated */
+		orb_check(_land_detected_sub, &updated);
+		if (updated) {
+			vehicle_land_detected_update();
+		}
+
+		/* navigation capabilities updated */
+		orb_check(_fw_pos_ctrl_status_sub, &updated);
+		if (updated) {
+			fw_pos_ctrl_status_update();
+		}
+
+		/* home position updated */
+		orb_check(_home_pos_sub, &updated);
+		if (updated) {
+			home_position_update();
+		}
+
+		orb_check(_vehicle_command_sub, &updated);
+		if (updated) {
+			vehicle_command_s cmd;
+			orb_copy(ORB_ID(vehicle_command), _vehicle_command_sub, &cmd);
+
+			if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_REPOSITION) {
+
+				struct position_setpoint_triplet_s *rep = get_reposition_triplet();
+
+				// store current position as previous position and goal as next将现在的位置存储为之前的位置
+				rep->previous.yaw = get_global_position()->yaw;
+				rep->previous.lat = get_global_position()->lat;
+				rep->previous.lon = get_global_position()->lon;
+				rep->previous.alt = get_global_position()->alt;
+
+				rep->current.loiter_radius = get_loiter_radius();
+				rep->current.loiter_direction = 1;
+				rep->current.type = position_setpoint_s::SETPOINT_TYPE_LOITER;
+
+				// Go on and check which changes had been requested更新现在的位置
+				if (PX4_ISFINITE(cmd.param4)) {//isFinite()是和isNaN()相反的，判断一个一个值是不是能转成数字
+					rep->current.yaw = cmd.param4;
+				} else {
+					rep->current.yaw = NAN;
+				}
+
+				if (PX4_ISFINITE(cmd.param5) && PX4_ISFINITE(cmd.param6)) {
+					rep->current.lat = (cmd.param5 < 1000) ? cmd.param5 : cmd.param5 / (double)1e7;
+					rep->current.lon = (cmd.param6 < 1000) ? cmd.param6 : cmd.param6 / (double)1e7;
+
+				} else {
+					rep->current.lat = get_global_position()->lat;
+					rep->current.lon = get_global_position()->lon;
+				}
+
+				if (PX4_ISFINITE(cmd.param7)) {
+					rep->current.alt = cmd.param7;
+				} else {
+					rep->current.alt = get_global_position()->alt;
+				}
+
+				rep->previous.valid = true;
+				rep->current.valid = true;
+				rep->next.valid = false;
+			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_NAV_TAKEOFF) {
+				struct position_setpoint_triplet_s *rep = get_takeoff_triplet();
+
+				// store current position as previous position and goal as next
+				rep->previous.yaw = get_global_position()->yaw;
+				rep->previous.lat = get_global_position()->lat;
+				rep->previous.lon = get_global_position()->lon;
+				rep->previous.alt = get_global_position()->alt;
+
+				rep->current.loiter_radius = get_loiter_radius();
+				rep->current.loiter_direction = 1;
+				rep->current.type = position_setpoint_s::SETPOINT_TYPE_TAKEOFF;
+				rep->current.yaw = cmd.param4;
+
+				if (PX4_ISFINITE(cmd.param5) && PX4_ISFINITE(cmd.param6)) {
+					rep->current.lat = (cmd.param5 < 1000) ? cmd.param5 : cmd.param5 / (double)1e7;
+					rep->current.lon = (cmd.param6 < 1000) ? cmd.param6 : cmd.param6 / (double)1e7;
+				} else {
+					// If one of them is non-finite, reset both
+					rep->current.lat = NAN;
+					rep->current.lon = NAN;
+				}
+
+				rep->current.alt = cmd.param7;
+
+				rep->previous.valid = true;
+				rep->current.valid = true;
+				rep->next.valid = false;
+
+			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_PAUSE_CONTINUE) {
+				warnx("navigator: got pause/continue command");
+			}
+		}
+
+		/* global position updated */
+		if (fds[0].revents & POLLIN) {
+			global_position_update();
+			if (_geofence.getSource() == Geofence::GF_SOURCE_GLOBALPOS) {
+				have_geofence_position_data = true;
+			}
+		}
+
+		/* Check geofence violation 检查是否超出电子围墙范围，并发布结果*/
+		static hrt_abstime last_geofence_check = 0;
+		if (have_geofence_position_data &&
+			(_geofence.getGeofenceAction() != geofence_result_s::GF_ACTION_NONE) &&
+			(hrt_elapsed_time(&last_geofence_check) > GEOFENCE_CHECK_INTERVAL)) {
+			bool inside = _geofence.inside(_global_pos, _gps_pos, _sensor_combined.baro_alt_meter, _home_pos, home_position_valid());
+			last_geofence_check = hrt_absolute_time();
+			have_geofence_position_data = false;
+
+			_geofence_result.geofence_action = _geofence.getGeofenceAction();
+			if (!inside) {
+				/* inform other apps via the mission result */
+				_geofence_result.geofence_violated = true;
+				publish_geofence_result();
+
+				/* Issue a warning about the geofence violation once */
+				if (!_geofence_violation_warning_sent) {
+					mavlink_log_critical(&_mavlink_log_pub, "Geofence violation");
+					_geofence_violation_warning_sent = true;
+				}
+			} else {
+				/* inform other apps via the mission result */
+				_geofence_result.geofence_violated = false;
+				publish_geofence_result();
+				/* Reset the _geofence_violation_warning_sent field */
+				_geofence_violation_warning_sent = false;
+			}
+		}
+
+		/* Do stuff according to navigation state set by commander 根据commander的指令，设定模式*/
+		switch (_vstatus.nav_state) {/****************< vehicle status ****************/
+			case vehicle_status_s::NAVIGATION_STATE_MANUAL:
+			case vehicle_status_s::NAVIGATION_STATE_ACRO:
+			case vehicle_status_s::NAVIGATION_STATE_ALTCTL:
+			case vehicle_status_s::NAVIGATION_STATE_POSCTL:
+			case vehicle_status_s::NAVIGATION_STATE_TERMINATION:
+			case vehicle_status_s::NAVIGATION_STATE_OFFBOARD:
+				_navigation_mode = nullptr;
+				_can_loiter_at_sp = false;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_mission;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_loiter;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_RCRECOVER:
+				_pos_sp_triplet_published_invalid_once = false;
+				if (_param_rcloss_act.get() == 1) {
+					_navigation_mode = &_loiter;
+				} else if (_param_rcloss_act.get() == 3) {
+					_navigation_mode = &_land;
+				} else if (_param_rcloss_act.get() == 4) {
+					_navigation_mode = &_rcLoss;
+				} else { /* if == 2 or unknown, RTL */
+					_navigation_mode = &_rtl;
+				}
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_RTL:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_rtl;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_takeoff;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_LAND:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_land;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_DESCEND:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_land;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_RTGS:
+				/* Use complex data link loss mode only when enabled via param
+				* otherwise use rtl 
+				# Auto return to groundstation on data link loss*/
+				_pos_sp_triplet_published_invalid_once = false;
+				if (_param_datalinkloss_act.get() == 1) {
+					_navigation_mode = &_loiter;
+				} else if (_param_datalinkloss_act.get() == 3) {
+					_navigation_mode = &_land;
+				} else if (_param_datalinkloss_act.get() == 4) {
+					_navigation_mode = &_dataLinkLoss;
+				} else { /* if == 2 or unknown, RTL */
+					_navigation_mode = &_rtl;
+				}
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_LANDENGFAIL:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_engineFailure;//# Auto land on engine failure
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_LANDGPSFAIL:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_gpsFailure;
+				break;
+			case vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET:
+				_pos_sp_triplet_published_invalid_once = false;
+				_navigation_mode = &_follow_target;
+				break;
+			default:
+				_navigation_mode = nullptr;
+				_can_loiter_at_sp = false;
+				break;
+		}
+
+		/* iterate through navigation modes and set active/inactive for each */
+		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
+			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
+		}
+
+		/* if nothing is running, set position setpoint triplet invalid once */
+		if (_navigation_mode == nullptr && !_pos_sp_triplet_published_invalid_once) {
+			_pos_sp_triplet_published_invalid_once = true;
+			_pos_sp_triplet.previous.valid = false;
+			_pos_sp_triplet.current.valid = false;
+			_pos_sp_triplet.next.valid = false;
+			_pos_sp_triplet_updated = true;
+		}
+
+		if (_pos_sp_triplet_updated) {
+			publish_position_setpoint_triplet();
+			_pos_sp_triplet_updated = false;
+		}
+
+		if (_mission_result_updated) {
+			publish_mission_result();
+			_mission_result_updated = false;
+		}
+
+		perf_end(_loop_perf);
+	}
+	/*************************结束******************************************/
+	warnx("exiting.");
+
+	_navigator_task = -1;
+	return;
+
+}
+2.Mission::on_active()
+void
+Mission::on_active()
+{
+	check_mission_valid(false);
+
+	/* check if anything has changed */
+	bool onboard_updated = false;
+	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);
+
+	if (onboard_updated) {
+		update_onboard_mission();
+	}
+
+	bool offboard_updated = false;
+	orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
+
+	if (offboard_updated) {
+		update_offboard_mission();
+	}
+
+	/* reset the current offboard mission if needed */
+	if (need_to_reset_mission(true)) {
+		reset_offboard_mission(_offboard_mission);
+		update_offboard_mission();
+		offboard_updated = true;
+	}
+
+	/* reset mission items if needed */
+	if (onboard_updated || offboard_updated) {
+		set_mission_items();
+	}
+
+	/* lets check if we reached the current mission item */
+	if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
+		set_mission_item_reached();
+
+		if (_mission_item.autocontinue) {
+			/* switch to next waypoint if 'autocontinue' flag set */
+			advance_mission();
+			set_mission_items();
+		}
+
+	} else if (_mission_type != MISSION_TYPE_NONE && _param_altmode.get() == MISSION_ALTMODE_FOH) {
+		altitude_sp_foh_update();
+
+	} else {
+		/* if waypoint position reached allow loiter on the setpoint */
+		if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
+			_navigator->set_can_loiter_at_sp(true);
+		}
+	}
+
+	/* see if we need to update the current yaw heading */
+	if ((_param_yawmode.get() != MISSION_YAWMODE_NONE
+	     && _param_yawmode.get() < MISSION_YAWMODE_MAX
+	     && _mission_type != MISSION_TYPE_NONE)
+	    || _navigator->get_vstatus()->is_vtol) {
+
+		heading_sp_update();
+	}
+
+	/* check if landing needs to be aborted */
+	if ((_mission_item.nav_cmd == NAV_CMD_LAND)
+	    && (_navigator->abort_landing())) {
+
+		do_abort_landing();
+	}
+
+}
+3.Mission::set_mission_items()
+void
+Mission::set_mission_items()
+{
+	/* make sure param is up to date */
+	updateParams();
+
+	/* reset the altitude foh (first order hold) logic, if altitude foh is enabled (param) a new foh element starts now */
+	altitude_sp_foh_reset();
+
+	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+
+	/* the home dist check provides user feedback, so we initialize it to this */
+	bool user_feedback_done = false;
+
+	/* mission item that comes after current if available */
+	struct mission_item_s mission_item_next_position;
+	bool has_next_position_item = false;
+
+	work_item_type new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+
+	/* copy information about the previous mission item */
+	if (item_contains_position(&_mission_item) && pos_sp_triplet->current.valid) {
+		/* Copy previous mission item altitude */
+		_mission_item_previous_alt = get_absolute_altitude_for_item(_mission_item);
+	}
+
+	/* try setting onboard mission item */
+	if (_param_onboard_enabled.get()
+	    && prepare_mission_items(true, &_mission_item, &mission_item_next_position, &has_next_position_item)) {
+
+		/* if mission type changed, notify */
+		if (_mission_type != MISSION_TYPE_ONBOARD) {
+			mavlink_log_info(_navigator->get_mavlink_log_pub(), "Executing internal mission");
+			user_feedback_done = true;
+		}
+
+		_mission_type = MISSION_TYPE_ONBOARD;
+
+		/* try setting offboard mission item */
+
+	} else if (prepare_mission_items(false, &_mission_item, &mission_item_next_position, &has_next_position_item)) {
+		/* if mission type changed, notify */
+		if (_mission_type != MISSION_TYPE_OFFBOARD) {
+			mavlink_log_info(_navigator->get_mavlink_log_pub(), "Executing mission");
+			user_feedback_done = true;
+		}
+
+		_mission_type = MISSION_TYPE_OFFBOARD;
+
+	} else {
+		/* no mission available or mission finished, switch to loiter */
+		if (_mission_type != MISSION_TYPE_NONE) {
+
+			if (_navigator->get_land_detected()->landed) {
+				mavlink_log_info(_navigator->get_mavlink_log_pub(), "mission finished, landed");
+
+			} else {
+				/* https://en.wikipedia.org/wiki/Loiter_(aeronautics) */
+				mavlink_log_info(_navigator->get_mavlink_log_pub(), "mission finished, loitering");
+
+				/* use last setpoint for loiter */
+				_navigator->set_can_loiter_at_sp(true);
+			}
+
+			user_feedback_done = true;
+		}
+
+		_mission_type = MISSION_TYPE_NONE;
+
+		/* set loiter mission item and ensure that there is a minimum clearance from home */
+		set_loiter_item(&_mission_item, _param_takeoff_alt.get());
+
+		/* update position setpoint triplet  */
+		pos_sp_triplet->previous.valid = false;
+		mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+		pos_sp_triplet->next.valid = false;
+
+		/* reuse setpoint for LOITER only if it's not IDLE */
+		_navigator->set_can_loiter_at_sp(pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER);
+
+		set_mission_finished();
+
+		if (!user_feedback_done) {
+			/* only tell users that we got no mission if there has not been any
+			 * better, more specific feedback yet
+			 * https://en.wikipedia.org/wiki/Loiter_(aeronautics)
+			 */
+
+			if (_navigator->get_land_detected()->landed) {
+				/* landed, refusing to take off without a mission */
+
+				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "no valid mission available, refusing takeoff");
+
+			} else {
+				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "no valid mission available, loitering");
+			}
+
+			user_feedback_done = true;
+
+		}
+
+		_navigator->set_position_setpoint_triplet_updated();
+		return;
+	}
+
+	/*********************************** handle mission item *********************************************/
+
+	/* handle position mission items */
+
+
+	if (item_contains_position(&_mission_item)) {
+
+		/* force vtol land */
+		if (_mission_item.nav_cmd == NAV_CMD_LAND && _navigator->get_vstatus()->is_vtol
+		    && _param_force_vtol.get() && !_navigator->get_vstatus()->is_rotary_wing) {
+
+			_mission_item.nav_cmd = NAV_CMD_VTOL_LAND;
+		}
+
+		/* we have a new position item so set previous position setpoint to current */
+		set_previous_pos_setpoint();
+
+		/* do takeoff before going to setpoint if needed and not already in takeoff */
+		if (do_need_takeoff() && _work_item_type != WORK_ITEM_TYPE_TAKEOFF) {
+
+			new_work_item_type = WORK_ITEM_TYPE_TAKEOFF;
+
+			/* use current mission item as next position item */
+			memcpy(&mission_item_next_position, &_mission_item, sizeof(struct mission_item_s));
+			mission_item_next_position.nav_cmd = NAV_CMD_WAYPOINT;
+			has_next_position_item = true;
+
+			float takeoff_alt = calculate_takeoff_altitude(&_mission_item);
+
+			mavlink_log_info(_navigator->get_mavlink_log_pub(), "takeoff to %.1f meters above home",
+					 (double)(takeoff_alt - _navigator->get_home_position()->alt));
+
+			_mission_item.nav_cmd = NAV_CMD_TAKEOFF;
+			_mission_item.lat = _navigator->get_global_position()->lat;
+			_mission_item.lon = _navigator->get_global_position()->lon;
+			/* ignore yaw for takeoff items */
+			_mission_item.yaw = NAN;
+			_mission_item.altitude = takeoff_alt;
+			_mission_item.altitude_is_relative = false;
+			_mission_item.autocontinue = true;
+			_mission_item.time_inside = 0;
+		}
+
+		/* if we just did a takeoff navigate to the actual waypoint now */
+		if (_work_item_type == WORK_ITEM_TYPE_TAKEOFF) {
+
+			if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
+			    && _navigator->get_vstatus()->is_rotary_wing
+			    && !_navigator->get_land_detected()->landed
+			    && has_next_position_item) {
+
+				/* check if the vtol_takeoff command is on top of us */
+				if (do_need_move_to_takeoff()) {
+					new_work_item_type = WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF;
+
+				} else {
+					new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+				}
+
+
+				_mission_item.nav_cmd = NAV_CMD_DO_VTOL_TRANSITION;
+				_mission_item.params[0] = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_FW;
+				_mission_item.yaw = _navigator->get_global_position()->yaw;
+
+			} else {
+				new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+				_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+				/* ignore yaw here, otherwise it might yaw before heading_sp_update takes over */
+				_mission_item.yaw = NAN;
+			}
+
+		}
+
+		/* takeoff completed and transitioned, move to takeoff wp as fixed wing */
+		if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
+		    && _work_item_type == WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF) {
+
+			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			_mission_item.autocontinue = true;
+			_mission_item.time_inside = 0.0f;
+		}
+
+		/* move to land wp as fixed wing */
+		if (_mission_item.nav_cmd == NAV_CMD_VTOL_LAND
+		    && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && !_navigator->get_land_detected()->landed) {
+
+			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND;
+			/* use current mission item as next position item */
+			memcpy(&mission_item_next_position, &_mission_item, sizeof(struct mission_item_s));
+			has_next_position_item = true;
+			float altitude = _navigator->get_global_position()->alt;
+
+			if (pos_sp_triplet->current.valid) {
+				altitude = pos_sp_triplet->current.alt;
+			}
+
+			_mission_item.altitude = altitude;
+			_mission_item.altitude_is_relative = false;
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			_mission_item.autocontinue = true;
+			_mission_item.time_inside = 0;
+		}
+
+		/* transition to MC */
+		if (_mission_item.nav_cmd == NAV_CMD_VTOL_LAND
+		    && _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND
+		    && !_navigator->get_vstatus()->is_rotary_wing
+		    && !_navigator->get_land_detected()->landed) {
+
+			_mission_item.nav_cmd = NAV_CMD_DO_VTOL_TRANSITION;
+			_mission_item.params[0] = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_MC;
+			_mission_item.autocontinue = true;
+			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION;
+		}
+
+		/* move to landing waypoint before descent if necessary */
+		if (do_need_move_to_land() &&
+		    (_work_item_type == WORK_ITEM_TYPE_DEFAULT ||
+		     _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION)) {
+
+			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND;
+
+			/* use current mission item as next position item */
+			memcpy(&mission_item_next_position, &_mission_item, sizeof(struct mission_item_s));
+			has_next_position_item = true;
+
+			/*
+			 * Ignoring waypoint altitude:
+			 * Set altitude to the same as we have now to prevent descending too fast into
+			 * the ground. Actual landing will descend anyway until it touches down.
+			 * XXX: We might want to change that at some point if it is clear to the user
+			 * what the altitude means on this waypoint type.
+			 */
+			float altitude = _navigator->get_global_position()->alt;
+
+			_mission_item.altitude = altitude;
+			_mission_item.altitude_is_relative = false;
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			_mission_item.autocontinue = true;
+			_mission_item.time_inside = 0;
+		}
+
+		/* we just moved to the landing waypoint, now descend */
+		if (_work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND
+		    && _navigator->get_vstatus()->is_rotary_wing) {
+
+			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+		}
+
+
+
+		/* ignore yaw for landing items */
+		/* XXX: if specified heading for landing is desired we could add another step before the descent
+		 * that aligns the vehicle first */
+		if (_mission_item.nav_cmd == NAV_CMD_LAND || _mission_item.nav_cmd == NAV_CMD_VTOL_LAND) {
+			_mission_item.yaw = NAN;
+		}
+
+		/* handle non-position mission items such as commands */
+
+	} else {
+
+		/* turn towards next waypoint before MC to FW transition */
+		if (_mission_item.nav_cmd == NAV_CMD_DO_VTOL_TRANSITION
+		    && _work_item_type != WORK_ITEM_TYPE_ALIGN
+		    && _navigator->get_vstatus()->is_rotary_wing
+		    && !_navigator->get_land_detected()->landed
+		    && has_next_position_item) {
+
+			new_work_item_type = WORK_ITEM_TYPE_ALIGN;
+			set_align_mission_item(&_mission_item, &mission_item_next_position);
+		}
+
+		/* yaw is aligned now */
+		if (_work_item_type == WORK_ITEM_TYPE_ALIGN) {
+			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+			set_previous_pos_setpoint();
+		}
+
+	}
+
+	/*********************************** set setpoints and check next *********************************************/
+
+	/* set current position setpoint from mission item (is protected against non-position items) */
+	mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+
+	/* issue command if ready (will do nothing for position mission items) */
+	issue_command(&_mission_item);
+
+	/* set current work item type */
+	_work_item_type = new_work_item_type;
+
+	/* require takeoff after landing or idle */
+	if (pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LAND
+	    || pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_IDLE) {
+
+		_need_takeoff = true;
+	}
+
+	_navigator->set_can_loiter_at_sp(false);
+	reset_mission_item_reached();
+
+	if (_mission_type == MISSION_TYPE_OFFBOARD) {
+		set_current_offboard_mission_item();
+	}
+
+	// TODO: report onboard mission item somehow
+
+	if (_mission_item.autocontinue && _mission_item.time_inside <= 0.001f) {
+		/* try to process next mission item */
+
+		if (has_next_position_item) {
+			/* got next mission item, update setpoint triplet */
+			mission_item_to_position_setpoint(&mission_item_next_position, &pos_sp_triplet->next);
+
+		} else {
+			/* next mission item is not available */
+			pos_sp_triplet->next.valid = false;
+		}
+
+	} else {
+		/* vehicle will be paused on current waypoint, don't set next item */
+		pos_sp_triplet->next.valid = false;
+	}
+
+	/* Save the distance between the current sp and the previous one */
+	if (pos_sp_triplet->current.valid && pos_sp_triplet->previous.valid) {
+
+		_distance_current_previous = get_distance_to_next_waypoint(
+						     pos_sp_triplet->current.lat,
+						     pos_sp_triplet->current.lon,
+						     pos_sp_triplet->previous.lat,
+						     pos_sp_triplet->previous.lon);
+	}
+
+	_navigator->set_position_setpoint_triplet_updated();
+}
+4.Mission::prepare_mission_items//是否准备好下一个waypoint
+bool
+Mission::prepare_mission_items(bool onboard, struct mission_item_s *mission_item,
+			       struct mission_item_s *next_position_mission_item, bool *has_next_position_item)
+{
+	bool first_res = false;
+	int offset = 1;
+
+	if (read_mission_item(onboard, 0, mission_item)) {
+
+		first_res = true;
+
+		/* trying to find next position mission item */
+		while (read_mission_item(onboard, offset, next_position_mission_item)) {
+
+			if (item_contains_position(next_position_mission_item)) {
+				*has_next_position_item = true;
+				break;
+			}
+
+			offset++;
+		}
+	}
+
+	return first_res;
+}
+5.Mission::read_mission_item//检测是否有新的waypoint
+bool
+Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *mission_item)
+{
+	/* select onboard/offboard mission */
+	int *mission_index_ptr;
+	dm_item_t dm_item;
+
+	struct mission_s *mission = (onboard) ? &_onboard_mission : &_offboard_mission;
+	int current_index = (onboard) ? _current_onboard_mission_index : _current_offboard_mission_index;
+	int index_to_read = current_index + offset;
+
+	/* do not work on empty missions */
+	if (mission->count == 0) {
+		return false;
+	}
+
+	if (onboard) {
+		/* onboard mission */
+		mission_index_ptr = (offset == 0) ? &_current_onboard_mission_index : &index_to_read;
+		dm_item = DM_KEY_WAYPOINTS_ONBOARD;/* Mission way point coordinates generated onboard 未见具体出处*/
+
+	} else {
+		/* offboard mission */
+		mission_index_ptr = (offset == 0) ? &_current_offboard_mission_index : &index_to_read;
+		dm_item = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
+		/*
+		    #define DM_KEY_WAYPOINTS_OFFBOARD(_id) (_id == 0 ? DM_KEY_WAYPOINTS_OFFBOARD_0 : DM_KEY_WAYPOINTS_OFFBOARD_1)
+	     	DM_KEY_WAYPOINTS_OFFBOARD_0,	 Mission way point coordinates sent over mavlink 
+    	    DM_KEY_WAYPOINTS_OFFBOARD_1,	 (alernate between 0 and 1)
+		*/
+	}
+
+	/* Repeat this several times in case there are several DO JUMPS that we need to follow along, however, after
+	 * 10 iterations we have to assume that the DO JUMPS are probably cycling and give up. 防止DO JUMPS*/
+	for (int i = 0; i < 10; i++) {
+
+		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
+			/* mission item index out of bounds - if they are equal, we just reached the end */
+			if (*mission_index_ptr != (int)mission->count) {
+				mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "[wpm] err: index: %d, max: %d", *mission_index_ptr,
+								 (int)mission->count);
+			}
+
+			return false;
+		}
+
+		const ssize_t len = sizeof(struct mission_item_s);
+
+		/* read mission item to temp storage first to not overwrite current mission item if data damaged */
+		struct mission_item_s mission_item_tmp;
+
+		/* read mission item from datamanager 什么是datamanager?????????????????????????*/
+		if (dm_read(dm_item, *mission_index_ptr, &mission_item_tmp, len) != len) {
+			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
+			mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "ERROR waypoint could not be read");
+			return false;
+		}
+
+		/* check for DO_JUMP item, and whether it hasn't not already been repeated enough times */
+		if (mission_item_tmp.nav_cmd == NAV_CMD_DO_JUMP) {
+
+			/* do DO_JUMP as many times as requested */
+			if (mission_item_tmp.do_jump_current_count < mission_item_tmp.do_jump_repeat_count) {
+
+				/* only raise the repeat count if this is for the current mission item
+				* but not for the read ahead mission item */
+				if (offset == 0) {
+					(mission_item_tmp.do_jump_current_count)++;
+
+					/* save repeat count */
+					if (dm_write(dm_item, *mission_index_ptr, DM_PERSIST_POWER_ON_RESET,
+						     &mission_item_tmp, len) != len) {
+						/* not supposed to happen unless the datamanager can't access the
+						 * dataman */
+						mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP waypoint could not be written");
+						return false;
+					}
+
+					report_do_jump_mission_changed(*mission_index_ptr,
+								       mission_item_tmp.do_jump_repeat_count);
+				}
+
+				/* set new mission item index and repeat
+				* we don't have to validate here, if it's invalid, we should realize this later .*/
+				*mission_index_ptr = mission_item_tmp.do_jump_mission_index;
+
+			} else {
+				if (offset == 0) {
+					mavlink_log_info(_navigator->get_mavlink_log_pub(), "DO JUMP repetitions completed");
+				}
+
+				/* no more DO_JUMPS, therefore just try to continue with next mission item */
+				(*mission_index_ptr)++;
+			}
+
+		} else {
+			/* if it's not a DO_JUMP, then we were successful */
+			memcpy(mission_item, &mission_item_tmp, sizeof(struct mission_item_s));
+			return true;
+		}
+	}
+
+	/* we have given up, we don't want to cycle forever */
+	mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP is cycling, giving up");
+	return false;
+}
