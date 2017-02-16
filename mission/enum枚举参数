@@ -1,0 +1,23 @@
+dm_item_t //data manager可以存储的 位置点 类型
+typedef enum {
+	DM_KEY_SAFE_POINTS = 0,		/* Safe points coordinates, safe point 0 is home point 安全点坐标 0安全点是起飞点*/
+	DM_KEY_FENCE_POINTS,		/* Fence vertex coordinates  围栏顶点坐标 */
+	DM_KEY_WAYPOINTS_OFFBOARD_0,	/* Mission way point coordinates sent over mavlink *///三种wAYPOINT :两种OFFBOARD 一种ONBOARD
+	DM_KEY_WAYPOINTS_OFFBOARD_1,	/* (alernate between 0 and 1) */
+	DM_KEY_WAYPOINTS_ONBOARD,	/* Mission way point coordinates generated onboard */
+	DM_KEY_MISSION_STATE,		/* Persistent mission state */
+	DM_KEY_NUM_KEYS			/* Total number of item types defined */
+} dm_item_t;
+/** Types of items that the data manager can store . data manager可以存储的数据 */
+
+_work_item_type  //mission item需要执行的mission item 的工作属性
+enum work_item_type {
+		WORK_ITEM_TYPE_DEFAULT,		/**< default mission item */
+		WORK_ITEM_TYPE_TAKEOFF,		/**< takeoff before moving to waypoint */
+		WORK_ITEM_TYPE_MOVE_TO_LAND,	/**< move to land waypoint before descent */
+		WORK_ITEM_TYPE_ALIGN,		/**< align for next waypoint */
+		WORK_ITEM_TYPE_CMD_BEFORE_MOVE,	/**<  */
+		WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF,	/**<  */
+		WORK_ITEM_TYPE_TRANSITON_BEFORE_LAND,	/**<  */
+		WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION	/**<  */
+	} _work_item_type;	/**< current type of work to do (sub mission item) */

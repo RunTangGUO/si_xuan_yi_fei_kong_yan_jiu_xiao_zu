@@ -1,0 +1,161 @@
+void
+Mission::check_mission_valid(bool force)
+{
+
+	if ((!_home_inited && _navigator->home_position_valid()) || force) {
+
+		dm_item_t dm_current = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
+		//#define DM_KEY_WAYPOINTS_OFFBOARD(_id) (_id == 0 ? DM_KEY_WAYPOINTS_OFFBOARD_0 : DM_KEY_WAYPOINTS_OFFBOARD_1)
+
+		_navigator->get_mission_result()->valid =
+			_missionFeasibilityChecker.checkMissionFeasible(
+				_navigator->get_mavlink_log_pub(),
+				(_navigator->get_vstatus()->is_rotary_wing || _navigator->get_vstatus()->is_vtol),
+				dm_current, (size_t) _offboard_mission.count, _navigator->get_geofence(),
+				_navigator->get_home_position()->alt,
+				_navigator->home_position_valid(),
+				_navigator->get_global_position()->lat,
+				_navigator->get_global_position()->lon,
+				_param_dist_1wp.get(),
+				_navigator->get_mission_result()->warning,
+				_navigator->get_default_acceptance_radius(),
+				_navigator->get_land_detected()->landed);
+
+		_navigator->increment_mission_instance_count();
+		_navigator->set_mission_result_updated();
+		_home_inited = _navigator->home_position_valid();
+	}
+}
+
+void
+Mission::update_onboard_mission()
+{
+	if (orb_copy(ORB_ID(onboard_mission), _navigator->get_onboard_mission_sub(), &_onboard_mission) == OK) {
+		/* accept the current index set by the onboard mission if it is within bounds */
+		if (_onboard_mission.current_seq >= 0
+		    && _onboard_mission.current_seq < (int)_onboard_mission.count) {
+			_current_onboard_mission_index = _onboard_mission.current_seq;
+
+		} else {
+			/* if less WPs available, reset to first WP */
+			if (_current_onboard_mission_index >= (int)_onboard_mission.count) {
+				_current_onboard_mission_index = 0;
+				/* if not initialized, set it to 0 */
+
+			} else if (_current_onboard_mission_index < 0) {
+				_current_onboard_mission_index = 0;
+			}
+
+			/* otherwise, just leave it */
+		}
+
+		// XXX check validity here as well
+		_navigator->get_mission_result()->valid = true;
+		/* reset mission failure if we have an updated valid mission */
+		_navigator->get_mission_result()->mission_failure = false;
+		_navigator->increment_mission_instance_count();
+		_navigator->set_mission_result_updated();
+
+	} else {
+		_onboard_mission.count = 0;
+		_onboard_mission.current_seq = 0;
+		_current_onboard_mission_index = 0;
+	}
+}
+
+void
+Mission::update_offboard_mission()
+{
+	bool failed = true;
+
+	if (orb_copy(ORB_ID(offboard_mission), _navigator->get_offboard_mission_sub(), &_offboard_mission) == OK) {
+		warnx("offboard mission updated: dataman_id=%d, count=%d, current_seq=%d", _offboard_mission.dataman_id,
+		      _offboard_mission.count, _offboard_mission.current_seq);
+
+		/* determine current index */
+		if (_offboard_mission.current_seq >= 0 && _offboard_mission.current_seq < (int)_offboard_mission.count) {
+			_current_offboard_mission_index = _offboard_mission.current_seq;
+
+		} else {
+			/* if less items available, reset to first item */
+			if (_current_offboard_mission_index >= (int)_offboard_mission.count) {
+				_current_offboard_mission_index = 0;
+
+				/* if not initialized, set it to 0 */
+
+			} else if (_current_offboard_mission_index < 0) {
+				_current_offboard_mission_index = 0;
+			}
+
+			/* otherwise, just leave it */
+		}
+
+		check_mission_valid(true);
+
+		failed = !_navigator->get_mission_result()->valid;
+
+		if (!failed) {
+			/* reset mission failure if we have an updated valid mission */
+			_navigator->get_mission_result()->mission_failure = false;
+		}
+
+	} else {
+		PX4_WARN("offboard mission update failed, handle: %d", _navigator->get_offboard_mission_sub());
+	}
+
+	if (failed) {
+		_offboard_mission.count = 0;
+		_offboard_mission.current_seq = 0;
+		_current_offboard_mission_index = 0;
+
+		warnx("mission check failed");
+	}
+
+	set_current_offboard_mission_item();
+}
+
+bool
+Mission::need_to_reset_mission(bool active)
+{
+	/* reset mission state when disarmed */
+	if (_navigator->get_vstatus()->arming_state != vehicle_status_s::ARMING_STATE_ARMED && _need_mission_reset) {
+		_need_mission_reset = false;
+		return true;
+
+	} else if (_navigator->get_vstatus()->arming_state == vehicle_status_s::ARMING_STATE_ARMED && active) {
+		/* mission is running, need reset after disarm *///怀疑有误
+		_need_mission_reset = true;
+	}
+
+	return false;
+}
+
+void Block::updateParams()
+{
+	BlockParamBase *param = getParams().getHead();
+	int count = 0;
+
+	while (param != NULL) {
+		if (count++ > maxParamsPerBlock) {
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
+			printf("exceeded max params for block: %s\n", name);
+			break;
+		}
+
+		//printf("updating param: %s\n", param->getName());
+		param->update();
+		param = param->getSibling();
+	}
+	/*	List<BlockParamBase *> &getParams() { return _params; }
+    *   T getHead() { return _head;}
+    *   T getSibling() { return _sibling; }*/
+}
+
+void
+Mission::altitude_sp_foh_reset()
+{
+	_min_current_sp_distance_xy = FLT_MAX;
+	// 	float _min_current_sp_distance_xy; /**< minimum distance which was achieved to the current waypoint  */
+	//#define FLT_MAX 3.40282347e+38F      数值范围为-3.4E38~3.4E38   单精度浮点数(能表示的最小的数)
+}

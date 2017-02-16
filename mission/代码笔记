@@ -480,7 +480,7 @@ Mission::set_mission_items()
 		_mission_item_previous_alt = get_absolute_altitude_for_item(_mission_item);
 	}
 
-	/* try setting onboard mission item */
+	/* try setting onboard mission item 设置航电 */
 	if (_param_onboard_enabled.get()
 	    && prepare_mission_items(true, &_mission_item, &mission_item_next_position, &has_next_position_item)) {
 

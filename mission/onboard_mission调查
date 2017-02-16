@@ -1,0 +1,27 @@
+void
+BottleDrop::task_main_trampoline(int argc, char *argv[])
+{
+	bottle_drop::g_bottle_drop->task_main();
+}
+
+
+int
+BottleDrop::start()
+{
+	ASSERT(_main_task == -1);
+
+	/* start the task */
+	_main_task = px4_task_spawn_cmd("bottle_drop",
+					SCHED_DEFAULT,
+					SCHED_PRIORITY_DEFAULT + 15,
+					1500,
+					(main_t)&BottleDrop::task_main_trampoline,
+					nullptr);
+
+	if (_main_task < 0) {
+		warn("task start failed");
+		return -errno;
+	}
+
+	return OK;
+}
