@@ -79,7 +79,7 @@ Navigator::task_main()//Navigator逻辑整理
 
 	while (!_task_should_exit) {
 
-		/* wait for up to 200ms for data */
+		/* wait for up to 200ms for data 数据可以以200ms一次的频率更新*/
 		int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 1000);//px4_poll?????????????????????????
 
 		if (pret == 0) {
@@ -99,8 +99,9 @@ Navigator::task_main()//Navigator逻辑整理
 			global_pos_available_once = true;
 		}
 
-		perf_begin(_loop_perf);//???????????????????????????????????????
-
+		perf_begin(_loop_perf);//???????????????????????????????????????_loop_perf参数与此函数的功能未知
+                               /**< loop performance counter */
+		
 		bool updated;
 
 		/* gps updated */
@@ -121,8 +122,8 @@ Navigator::task_main()//Navigator逻辑整理
 		/* parameters updated */
 		orb_check(_param_update_sub, &updated);
 		if (updated) {
-			params_update();
-			updateParams();
+			params_update();//params内部包含什么参数未知
+			updateParams();//功能未知
 		}
 
 		/* vehicle control mode updated */
@@ -160,12 +161,13 @@ Navigator::task_main()//Navigator逻辑整理
 			vehicle_command_s cmd;
 			orb_copy(ORB_ID(vehicle_command), _vehicle_command_sub, &cmd);
 
+            //重新定位时操作的内容
 			if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_REPOSITION) {
 
 				struct position_setpoint_triplet_s *rep = get_reposition_triplet();
 
 				// store current position as previous position and goal as next将现在的位置存储为之前的位置
-				rep->previous.yaw = get_global_position()->yaw;
+				rep->previous.yaw = get_global_position()->yaw;//_global_position为什么是之前的位置
 				rep->previous.lat = get_global_position()->lat;
 				rep->previous.lon = get_global_position()->lon;
 				rep->previous.alt = get_global_position()->alt;
@@ -176,7 +178,7 @@ Navigator::task_main()//Navigator逻辑整理
 
 				// Go on and check which changes had been requested更新现在的位置
 				if (PX4_ISFINITE(cmd.param4)) {//isFinite()是和isNaN()相反的，判断一个一个值是不是能转成数字
-					rep->current.yaw = cmd.param4;
+					rep->current.yaw = cmd.param4;//cmd内部包含航向的信息，_global_position里面包含位置信息 ，似乎cmd内部更准确
 				} else {
 					rep->current.yaw = NAN;
 				}
@@ -202,7 +204,7 @@ Navigator::task_main()//Navigator逻辑整理
 			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_NAV_TAKEOFF) {
 				struct position_setpoint_triplet_s *rep = get_takeoff_triplet();
 
-				// store current position as previous position and goal as next
+				// store current position as previous position and goal as next  goal在哪儿
 				rep->previous.yaw = get_global_position()->yaw;
 				rep->previous.lat = get_global_position()->lat;
 				rep->previous.lon = get_global_position()->lon;
@@ -283,7 +285,7 @@ Navigator::task_main()//Navigator逻辑整理
 				break;
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION:
 				_pos_sp_triplet_published_invalid_once = false;
-				_navigation_mode = &_mission;
+				_navigation_mode = &_mission;//设定flag
 				break;
 			case vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER:
 				_pos_sp_triplet_published_invalid_once = false;
@@ -352,7 +354,7 @@ Navigator::task_main()//Navigator逻辑整理
 
 		/* iterate through navigation modes and set active/inactive for each */
 		for (unsigned int i = 0; i < NAVIGATOR_MODE_ARRAY_SIZE; i++) {
-			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);
+			_navigation_mode_array[i]->run(_navigation_mode == _navigation_mode_array[i]);//入口
 		}
 
 		/* if nothing is running, set position setpoint triplet invalid once */
@@ -364,7 +366,7 @@ Navigator::task_main()//Navigator逻辑整理
 			_pos_sp_triplet_updated = true;
 		}
 
-		if (_pos_sp_triplet_updated) {
+		if (_pos_sp_triplet_updated) {//更新点
 			publish_position_setpoint_triplet();
 			_pos_sp_triplet_updated = false;
 		}
@@ -391,7 +393,7 @@ Mission::on_active()
 
 	/* check if anything has changed */
 	bool onboard_updated = false;
-	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);
+	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);//如果_onboard_mission_sub被其他任务设置为正，onboard_updated为true,同时_onboard_mission已经被声明
 
 	if (onboard_updated) {
 		update_onboard_mission();
@@ -477,11 +479,11 @@ Mission::set_mission_items()
 	/* copy information about the previous mission item */
 	if (item_contains_position(&_mission_item) && pos_sp_triplet->current.valid) {
 		/* Copy previous mission item altitude */
-		_mission_item_previous_alt = get_absolute_altitude_for_item(_mission_item);
+		_mission_item_previous_alt = get_absolute_altitude_for_item(_mission_item);//此时mission item 为前一时刻的
 	}
 
-	/* try setting onboard mission item 设置航电 */
-	if (_param_onboard_enabled.get()
+	/* try setting onboard mission item 设置航点 */
+	if (_param_onboard_enabled.get()//具体内容未见
 	    && prepare_mission_items(true, &_mission_item, &mission_item_next_position, &has_next_position_item)) {
 
 		/* if mission type changed, notify */
@@ -511,7 +513,7 @@ Mission::set_mission_items()
 				mavlink_log_info(_navigator->get_mavlink_log_pub(), "mission finished, landed");
 
 			} else {
-				/* https://en.wikipedia.org/wiki/Loiter_(aeronautics) */
+				/* https://en.wikipedia.org/wiki/Loiter_(aeronautics) 不知道让我看什么（还没看）*/
 				mavlink_log_info(_navigator->get_mavlink_log_pub(), "mission finished, loitering");
 
 				/* use last setpoint for loiter */
@@ -523,14 +525,14 @@ Mission::set_mission_items()
 
 		_mission_type = MISSION_TYPE_NONE;
 
-		/* set loiter mission item and ensure that there is a minimum clearance from home */
+		/* set loiter mission item and ensure that there is a minimum clearance from home 不知为何 */
 		set_loiter_item(&_mission_item, _param_takeoff_alt.get());
 
 		/* update position setpoint triplet  */
 		pos_sp_triplet->previous.valid = false;
-		mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+		mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);//利用新的mission item 设定航点
 		pos_sp_triplet->next.valid = false;
-
+        //不同的点触发不同的状态
 		/* reuse setpoint for LOITER only if it's not IDLE */
 		_navigator->set_can_loiter_at_sp(pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER);
 
@@ -799,135 +801,4 @@ Mission::set_mission_items()
 	_navigator->set_position_setpoint_triplet_updated();
 }
 4.Mission::prepare_mission_items//是否准备好下一个waypoint
-bool
-Mission::prepare_mission_items(bool onboard, struct mission_item_s *mission_item,
-			       struct mission_item_s *next_position_mission_item, bool *has_next_position_item)
-{
-	bool first_res = false;
-	int offset = 1;
-
-	if (read_mission_item(onboard, 0, mission_item)) {
-
-		first_res = true;
-
-		/* trying to find next position mission item */
-		while (read_mission_item(onboard, offset, next_position_mission_item)) {
-
-			if (item_contains_position(next_position_mission_item)) {
-				*has_next_position_item = true;
-				break;
-			}
-
-			offset++;
-		}
-	}
-
-	return first_res;
-}
 5.Mission::read_mission_item//检测是否有新的waypoint
-bool
-Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *mission_item)
-{
-	/* select onboard/offboard mission */
-	int *mission_index_ptr;
-	dm_item_t dm_item;
-
-	struct mission_s *mission = (onboard) ? &_onboard_mission : &_offboard_mission;
-	int current_index = (onboard) ? _current_onboard_mission_index : _current_offboard_mission_index;
-	int index_to_read = current_index + offset;
-
-	/* do not work on empty missions */
-	if (mission->count == 0) {
-		return false;
-	}
-
-	if (onboard) {
-		/* onboard mission */
-		mission_index_ptr = (offset == 0) ? &_current_onboard_mission_index : &index_to_read;
-		dm_item = DM_KEY_WAYPOINTS_ONBOARD;/* Mission way point coordinates generated onboard 未见具体出处*/
-
-	} else {
-		/* offboard mission */
-		mission_index_ptr = (offset == 0) ? &_current_offboard_mission_index : &index_to_read;
-		dm_item = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
-		/*
-		    #define DM_KEY_WAYPOINTS_OFFBOARD(_id) (_id == 0 ? DM_KEY_WAYPOINTS_OFFBOARD_0 : DM_KEY_WAYPOINTS_OFFBOARD_1)
-	     	DM_KEY_WAYPOINTS_OFFBOARD_0,	 Mission way point coordinates sent over mavlink 
-    	    DM_KEY_WAYPOINTS_OFFBOARD_1,	 (alernate between 0 and 1)
-		*/
-	}
-
-	/* Repeat this several times in case there are several DO JUMPS that we need to follow along, however, after
-	 * 10 iterations we have to assume that the DO JUMPS are probably cycling and give up. 防止DO JUMPS*/
-	for (int i = 0; i < 10; i++) {
-
-		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
-			/* mission item index out of bounds - if they are equal, we just reached the end */
-			if (*mission_index_ptr != (int)mission->count) {
-				mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "[wpm] err: index: %d, max: %d", *mission_index_ptr,
-								 (int)mission->count);
-			}
-
-			return false;
-		}
-
-		const ssize_t len = sizeof(struct mission_item_s);
-
-		/* read mission item to temp storage first to not overwrite current mission item if data damaged */
-		struct mission_item_s mission_item_tmp;
-
-		/* read mission item from datamanager 什么是datamanager?????????????????????????*/
-		if (dm_read(dm_item, *mission_index_ptr, &mission_item_tmp, len) != len) {
-			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
-			mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "ERROR waypoint could not be read");
-			return false;
-		}
-
-		/* check for DO_JUMP item, and whether it hasn't not already been repeated enough times */
-		if (mission_item_tmp.nav_cmd == NAV_CMD_DO_JUMP) {
-
-			/* do DO_JUMP as many times as requested */
-			if (mission_item_tmp.do_jump_current_count < mission_item_tmp.do_jump_repeat_count) {
-
-				/* only raise the repeat count if this is for the current mission item
-				* but not for the read ahead mission item */
-				if (offset == 0) {
-					(mission_item_tmp.do_jump_current_count)++;
-
-					/* save repeat count */
-					if (dm_write(dm_item, *mission_index_ptr, DM_PERSIST_POWER_ON_RESET,
-						     &mission_item_tmp, len) != len) {
-						/* not supposed to happen unless the datamanager can't access the
-						 * dataman */
-						mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP waypoint could not be written");
-						return false;
-					}
-
-					report_do_jump_mission_changed(*mission_index_ptr,
-								       mission_item_tmp.do_jump_repeat_count);
-				}
-
-				/* set new mission item index and repeat
-				* we don't have to validate here, if it's invalid, we should realize this later .*/
-				*mission_index_ptr = mission_item_tmp.do_jump_mission_index;
-
-			} else {
-				if (offset == 0) {
-					mavlink_log_info(_navigator->get_mavlink_log_pub(), "DO JUMP repetitions completed");
-				}
-
-				/* no more DO_JUMPS, therefore just try to continue with next mission item */
-				(*mission_index_ptr)++;
-			}
-
-		} else {
-			/* if it's not a DO_JUMP, then we were successful */
-			memcpy(mission_item, &mission_item_tmp, sizeof(struct mission_item_s));
-			return true;
-		}
-	}
-
-	/* we have given up, we don't want to cycle forever */
-	mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP is cycling, giving up");
-	return false;
-}

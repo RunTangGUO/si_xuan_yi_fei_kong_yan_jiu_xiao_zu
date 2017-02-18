@@ -1,0 +1,103 @@
+//这个函数为什么初始化_onboard_mission，    此处假设：_onboard_mission是在BottleDrop启用时设置的，为任务所必须
+//检查onboard_updated
+//检查orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated)
+int uORB::Manager::orb_check(int handle, bool *updated)
+{
+	/* Set to false here so that if `px4_ioctl` fails to false. */
+	*updated = false;
+	return px4_ioctl(handle, ORBIOCUPDATED, (unsigned long)(uintptr_t)updated);
+}
+//检查orb_check其中的px4_ioctl9()
+//找不到确切的px4_ioctl9()定义
+//只有   __EXPORT int		px4_ioctl(int fd, int cmd, unsigned long arg);
+//调查不同的 handle 数值是否不同    _onboard_mission_sub = orb_subscribe(ORB_ID(onboard_mission));
+int uORB::Manager::orb_subscribe(const struct orb_metadata *meta)
+{
+	return node_open(PUBSUB, meta, nullptr, false);
+}
+//猜测根据不同的ORB_ID返回对应的数值
+//此处暂停调查
+class BottleDrop
+{
+public:
+	/**
+	 * Constructor
+	 */
+	BottleDrop();
+
+	/**
+	 * Destructor, also kills task.
+	 */
+	~BottleDrop();
+
+	/**
+	 * Start the task.
+	 *
+	 * @return		OK on success.
+	 */
+	int		start();
+
+	/**
+	 * Display status.
+	 */
+	void		status();
+
+	void		open_bay();
+	void		close_bay();
+	void		drop();
+	void		lock_release();
+
+private:
+	bool		_task_should_exit;		/**< if true, task should exit */
+	int		_main_task;			/**< handle for task */
+	orb_advert_t	_mavlink_log_pub;
+
+	int		_command_sub;
+	int		_wind_estimate_sub;
+	struct vehicle_command_s	_command;
+	struct vehicle_global_position_s _global_pos;
+	map_projection_reference_s ref;
+
+	orb_advert_t	_actuator_pub;
+	struct actuator_controls_s _actuators;
+
+	bool		_drop_approval;
+	hrt_abstime	_doors_opened;
+	hrt_abstime	_drop_time;
+
+	float		_alt_clearance;
+
+	struct position_s {
+		double lat;	///< degrees
+		double lon;	///< degrees
+		float alt;	///< m
+	} _target_position, _drop_position;
+
+	enum DROP_STATE {
+		DROP_STATE_INIT = 0,
+		DROP_STATE_TARGET_VALID,
+		DROP_STATE_TARGET_SET,
+		DROP_STATE_BAY_OPEN,
+		DROP_STATE_DROPPED,
+		DROP_STATE_BAY_CLOSED
+	} _drop_state;
+
+	struct mission_s	_onboard_mission;
+	orb_advert_t		_onboard_mission_pub;
+
+	void		task_main();
+
+	void		handle_command(struct vehicle_command_s *cmd);
+
+	void		answer_command(struct vehicle_command_s *cmd, unsigned result);
+
+	/**
+	 * Set the actuators
+	 */
+	int		actuators_publish();
+
+	/**
+	 * Shim for calling task_main from task_create.
+	 */
+	static void	task_main_trampoline(int argc, char *argv[]);
+};

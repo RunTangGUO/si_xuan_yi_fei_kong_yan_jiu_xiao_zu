@@ -1,0 +1,5 @@
+typedef int (*px4_main_t)(int argc, char *argv[]);
+
+/* Task entry point */
+
+typedef int (*main_t)(int argc, char *argv[]);

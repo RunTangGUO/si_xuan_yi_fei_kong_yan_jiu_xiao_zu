@@ -1,0 +1,8 @@
+padding
+trampoline
+
+以解决的参数名
+    _mc      multicopter
+	_fw      fixedwing
+	radius   猜测为 半径 ；英文还有 有效航程 的释义
+	Retrieve 重新得到

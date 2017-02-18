@@ -38,13 +38,14 @@ Mission::update_onboard_mission()
 
 		} else {
 			/* if less WPs available, reset to first WP */
-			if (_current_onboard_mission_index >= (int)_onboard_mission.count) {
+			if (_current_onboard_mission_index >= (int)_onboard_mission.count/*此处为有效WP个数*/) {
 				_current_onboard_mission_index = 0;
 				/* if not initialized, set it to 0 */
 
 			} else if (_current_onboard_mission_index < 0) {
 				_current_onboard_mission_index = 0;
 			}
+			//在此处设置了_current_onboard_mission_index，第一个WP为0
 
 			/* otherwise, just leave it */
 		}
@@ -53,8 +54,8 @@ Mission::update_onboard_mission()
 		_navigator->get_mission_result()->valid = true;
 		/* reset mission failure if we have an updated valid mission */
 		_navigator->get_mission_result()->mission_failure = false;
-		_navigator->increment_mission_instance_count();
-		_navigator->set_mission_result_updated();
+		_navigator->increment_mission_instance_count();//void		increment_mission_instance_count() { _mission_instance_count++; } NAVIGATOR内部的参数
+		_navigator->set_mission_result_updated();//void		set_mission_result_updated() { _mission_result_updated = true; }
 
 	} else {
 		_onboard_mission.count = 0;
@@ -158,4 +159,204 @@ Mission::altitude_sp_foh_reset()
 	_min_current_sp_distance_xy = FLT_MAX;
 	// 	float _min_current_sp_distance_xy; /**< minimum distance which was achieved to the current waypoint  */
 	//#define FLT_MAX 3.40282347e+38F      数值范围为-3.4E38~3.4E38   单精度浮点数(能表示的最小的数)
+}
+
+void
+Mission::set_current_offboard_mission_item()
+{
+	_navigator->get_mission_result()->reached = false;
+	_navigator->get_mission_result()->finished = false;
+	_navigator->get_mission_result()->seq_current = _current_offboard_mission_index;
+	_navigator->set_mission_result_updated();
+
+	save_offboard_mission_state();
+}
+
+int		get_onboard_mission_sub() { return _onboard_mission_sub; }
+
+int  orb_copy(const struct orb_metadata *meta, int handle, void *buffer)
+{
+	return uORB::Manager::get_instance()->orb_copy(meta, handle, buffer);
+}
+
+int uORB::Manager::orb_copy(const struct orb_metadata *meta, int handle, void *buffer)
+{
+	int ret;
+
+	ret = px4_read(handle, buffer, meta->o_size);
+
+	if (ret < 0) {
+		return ERROR;
+	}
+
+	if (ret != (int)meta->o_size) {
+		errno = EIO;
+		return ERROR;
+	}
+
+	return PX4_OK;
+}
+
+ssize_t px4_read(int fd, void *buffer, size_t buflen)
+	{
+		int ret;
+
+		VDev *dev = get_vdev(fd);
+
+		if (dev) {
+			PX4_DEBUG("px4_read fd = %d", fd);
+			ret = dev->read(filemap[fd], (char *)buffer, buflen);
+
+		} else {
+			ret = -EINVAL;
+		}
+
+		if (ret < 0) {
+			px4_errno = -ret;
+			ret = PX4_ERROR;
+		}
+
+		return ret;
+	}
+	
+ssize_t
+VDev::read(file_t *filep, char *buffer, size_t buflen)
+{
+	PX4_DEBUG("VDev::read");
+	return -ENOSYS;
+}
+
+Mission::prepare_mission_items//是否准备好下一个waypoint，更新mission item。
+bool
+Mission::prepare_mission_items(bool onboard, struct mission_item_s *mission_item,
+			       struct mission_item_s *next_position_mission_item, bool *has_next_position_item)
+{
+	bool first_res = false;
+	int offset = 1;
+
+	if (read_mission_item(onboard, 0, mission_item)) {
+
+		first_res = true;
+
+		/* trying to find next position mission item */
+		while (read_mission_item(onboard, offset, next_position_mission_item)) {
+
+			if (item_contains_position(next_position_mission_item)) {
+				*has_next_position_item = true;
+				break;
+			}
+
+			offset++;
+		}
+	}
+
+	return first_res;
+}
+
+bool
+Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *mission_item)
+{
+	/* select onboard/offboard mission */
+	int *mission_index_ptr;
+	dm_item_t dm_item;
+
+	struct mission_s *mission = (onboard) ? &_onboard_mission : &_offboard_mission;
+	int current_index = (onboard) ? _current_onboard_mission_index : _current_offboard_mission_index;
+	int index_to_read = current_index + offset;
+
+	/* do not work on empty missions */
+	if (mission->count == 0) {
+		return false;
+	}
+
+	if (onboard) {
+		/* onboard mission */
+		mission_index_ptr = (offset == 0) ? &_current_onboard_mission_index : &index_to_read;
+		dm_item = DM_KEY_WAYPOINTS_ONBOARD;/* Mission way point coordinates generated onboard 未见具体出处*/
+
+	} else {
+		/* offboard mission */
+		mission_index_ptr = (offset == 0) ? &_current_offboard_mission_index : &index_to_read;
+		dm_item = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
+		/*
+		    #define DM_KEY_WAYPOINTS_OFFBOARD(_id) (_id == 0 ? DM_KEY_WAYPOINTS_OFFBOARD_0 : DM_KEY_WAYPOINTS_OFFBOARD_1)
+	     	DM_KEY_WAYPOINTS_OFFBOARD_0,	 Mission way point coordinates sent over mavlink 
+    	    DM_KEY_WAYPOINTS_OFFBOARD_1,	 (alernate between 0 and 1)
+		*/
+	}
+
+	/* Repeat this several times in case there are several DO JUMPS that we need to follow along, however, after
+	 * 10 iterations we have to assume that the DO JUMPS are probably cycling and give up. 防止DO JUMPS*/
+	for (int i = 0; i < 10; i++) {
+
+		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
+			/* mission item index out of bounds - if they are equal, we just reached the end */
+			if (*mission_index_ptr != (int)mission->count) {
+				//里面有货！仅仅是通知，，，，
+				mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "[wpm] err: index: %d, max: %d", *mission_index_ptr,
+								 (int)mission->count);
+			}
+
+			return false;
+		}
+
+		const ssize_t len = sizeof(struct mission_item_s);
+
+		/* read mission item to temp storage first to not overwrite current mission item if data damaged */
+		struct mission_item_s mission_item_tmp;
+
+		/* read mission item from datamanager 什么是datamanager?????????????????????????*/
+		if (dm_read(dm_item, *mission_index_ptr, &mission_item_tmp, len) != len) {
+			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
+			mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "ERROR waypoint could not be read");
+			return false;
+		}
+
+		/* check for DO_JUMP item, and whether it hasn't not already been repeated enough times */
+		if (mission_item_tmp.nav_cmd == NAV_CMD_DO_JUMP) {
+
+			/* do DO_JUMP as many times as requested */
+			if (mission_item_tmp.do_jump_current_count < mission_item_tmp.do_jump_repeat_count) {
+
+				/* only raise the repeat count if this is for the current mission item
+				* but not for the read ahead mission item */
+				if (offset == 0) {
+					(mission_item_tmp.do_jump_current_count)++;
+
+					/* save repeat count */
+					if (dm_write(dm_item, *mission_index_ptr, DM_PERSIST_POWER_ON_RESET,
+						     &mission_item_tmp, len) != len) {
+						/* not supposed to happen unless the datamanager can't access the
+						 * dataman */
+						mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP waypoint could not be written");
+						return false;
+					}
+
+					report_do_jump_mission_changed(*mission_index_ptr,
+								       mission_item_tmp.do_jump_repeat_count);
+				}
+
+				/* set new mission item index and repeat
+				* we don't have to validate here, if it's invalid, we should realize this later .*/
+				*mission_index_ptr = mission_item_tmp.do_jump_mission_index;
+
+			} else {
+				if (offset == 0) {
+					mavlink_log_info(_navigator->get_mavlink_log_pub(), "DO JUMP repetitions completed");
+				}
+
+				/* no more DO_JUMPS, therefore just try to continue with next mission item */
+				(*mission_index_ptr)++;
+			}
+
+		} else {
+			/* if it's not a DO_JUMP, then we were successful 覆盖nacigator的mission item*/
+			memcpy(mission_item, &mission_item_tmp, sizeof(struct mission_item_s));//猜测是复制内存到的意思
+			return true;
+		}
+	}
+
+	/* we have given up, we don't want to cycle forever */
+	mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP is cycling, giving up");
+	return false;
 }

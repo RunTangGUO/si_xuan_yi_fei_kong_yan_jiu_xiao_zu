@@ -138,6 +138,7 @@ public:
 
 private:
 
+    //每个参数具备的功能需整理分类
 	bool		_task_should_exit;		/**< if true, sensor task should exit */
 	int		_navigator_task;		/**< task handle for sensor task */
 
@@ -186,7 +187,7 @@ private:
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 
 	Geofence	_geofence;			/**< class that handles the geofence */
-	bool		_geofence_violation_warning_sent; /**< prevents spaming to mavlink */
+	bool		_geofence_violation_warning_sent; /**< prevents spaming to mavlink *///spam为垃圾邮件
 
 	bool		_inside_fence;			/**< vehicle is inside fence */
 
@@ -341,7 +342,7 @@ Navigator::Navigator() :
 	_att_sp{},
 	_mission_item_valid(false),
 	_mission_instance_count(0),
-	_loop_perf(perf_alloc(PC_ELAPSED, "navigator")),
+	_loop_perf(perf_alloc(PC_ELAPSED, "navigator")),//可以检查一下内容
 	_geofence(this),
 	_geofence_violation_warning_sent(false),
 	_inside_fence(true),
@@ -460,4 +461,4 @@ struct mission_s {
 #ifdef __cplusplus
 
 #endif
-};
+};//不知道声明后的默认数值是多少，是否为uint32_t的默认数值

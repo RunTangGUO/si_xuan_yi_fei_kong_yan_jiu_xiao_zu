@@ -27,7 +27,7 @@ struct position_setpoint_triplet_s {
 	struct position_setpoint_s next;
 };
 
-struct position_setpoint_s {
+struct position_setpoint_s {//可能存储目标航点的结构体
 	uint64_t timestamp; // required for logger
 	double lat;
 	double lon;
@@ -148,7 +148,7 @@ struct vehicle_status_s {
 #endif
 };
 
-struct mission_item_s {
+struct mission_item_s {//是可能存储任务的结构体
 	bool altitude_is_relative;	/**< true if altitude is relative from start point	*/
 	double lat;			/**< latitude in degrees				*/
 	double lon;			/**< longitude in degrees				*/
