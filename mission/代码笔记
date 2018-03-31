@@ -460,10 +460,10 @@ void
 Mission::set_mission_items()
 {
 	/* make sure param is up to date */
-	updateParams();
+	updateParams();更新数据
 
 	/* reset the altitude foh (first order hold) logic, if altitude foh is enabled (param) a new foh element starts now */
-	altitude_sp_foh_reset();
+	altitude_sp_foh_reset();设置第一个命令时的高度
 
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
@@ -484,7 +484,7 @@ Mission::set_mission_items()
 
 	/* try setting onboard mission item 设置航点 */
 	if (_param_onboard_enabled.get()//具体内容未见
-	    && prepare_mission_items(true, &_mission_item, &mission_item_next_position, &has_next_position_item)) {
+	    && prepare_mission_items(true, &_mission_item, &mission_item_next_position, &has_next_position_item)) {//用下一个任务点更新任务
 
 		/* if mission type changed, notify */
 		if (_mission_type != MISSION_TYPE_ONBOARD) {
@@ -520,7 +520,7 @@ Mission::set_mission_items()
 				_navigator->set_can_loiter_at_sp(true);
 			}
 
-			user_feedback_done = true;
+			user_feedback_done = true; 
 		}
 
 		_mission_type = MISSION_TYPE_NONE;
@@ -568,7 +568,7 @@ Mission::set_mission_items()
 
 	if (item_contains_position(&_mission_item)) {
 
-		/* force vtol land */
+		/* force vtol land *///垂直降落
 		if (_mission_item.nav_cmd == NAV_CMD_LAND && _navigator->get_vstatus()->is_vtol
 		    && _param_force_vtol.get() && !_navigator->get_vstatus()->is_rotary_wing) {
 
@@ -578,7 +578,7 @@ Mission::set_mission_items()
 		/* we have a new position item so set previous position setpoint to current */
 		set_previous_pos_setpoint();
 
-		/* do takeoff before going to setpoint if needed and not already in takeoff */
+		/* do takeoff before going to setpoint if needed and not already in takeoff *///在飞向航点前先垂直起飞到特定高度
 		if (do_need_takeoff() && _work_item_type != WORK_ITEM_TYPE_TAKEOFF) {
 
 			new_work_item_type = WORK_ITEM_TYPE_TAKEOFF;
@@ -604,7 +604,7 @@ Mission::set_mission_items()
 			_mission_item.time_inside = 0;
 		}
 
-		/* if we just did a takeoff navigate to the actual waypoint now */
+		/* if we just did a takeoff navigate to the actual waypoint now *///刚刚进行过垂直起飞则飞向目标航点
 		if (_work_item_type == WORK_ITEM_TYPE_TAKEOFF) {
 
 			if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
@@ -678,7 +678,7 @@ Mission::set_mission_items()
 			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION;
 		}
 
-		/* move to landing waypoint before descent if necessary */
+		/* move to landing waypoint before descent if necessary *///在下降之前移动到着陆点
 		if (do_need_move_to_land() &&
 		    (_work_item_type == WORK_ITEM_TYPE_DEFAULT ||
 		     _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION)) {
@@ -705,7 +705,7 @@ Mission::set_mission_items()
 			_mission_item.time_inside = 0;
 		}
 
-		/* we just moved to the landing waypoint, now descend */
+		/* we just moved to the landing waypoint, now descend *///飞到着陆点上方，可以进行着陆
 		if (_work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND
 		    && _navigator->get_vstatus()->is_rotary_wing) {
 
@@ -714,7 +714,7 @@ Mission::set_mission_items()
 
 
 
-		/* ignore yaw for landing items */
+		/* ignore yaw for landing items *///着陆时是否需要控制航向
 		/* XXX: if specified heading for landing is desired we could add another step before the descent
 		 * that aligns the vehicle first */
 		if (_mission_item.nav_cmd == NAV_CMD_LAND || _mission_item.nav_cmd == NAV_CMD_VTOL_LAND) {
@@ -769,7 +769,7 @@ Mission::set_mission_items()
 		set_current_offboard_mission_item();
 	}
 
-	// TODO: report onboard mission item somehow
+	// TODO: report onboard mission item somehow//如果设置为自动进行下一个航点，并且目前航点已经执行完，则自动进行下一个航点
 
 	if (_mission_item.autocontinue && _mission_item.time_inside <= 0.001f) {
 		/* try to process next mission item */
@@ -788,7 +788,7 @@ Mission::set_mission_items()
 		pos_sp_triplet->next.valid = false;
 	}
 
-	/* Save the distance between the current sp and the previous one */
+	/* Save the distance between the current sp and the previous one 保存两个航点之间的距离*/
 	if (pos_sp_triplet->current.valid && pos_sp_triplet->previous.valid) {
 
 		_distance_current_previous = get_distance_to_next_waypoint(

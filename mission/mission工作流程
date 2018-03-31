@@ -443,3 +443,178 @@ if (_pos_sp_triplet_updated) {//_pos_sp_triplet_updated来源于set_position_set
 	void Mission::altitude_sp_foh_update()
 	void Mission::do_abort_landing()
 	void Mission::set_mission_items()  其中调用两次
+//包含set_mission_result_updated()的函数
+    void Navigator::set_mission_failure(const char* reason)
+	void NavigatorMode::run(bool active){
+	if (active) {
+		if (_first_run) {
+			/* first run */
+			_first_run = false;
+			/* Reset stay in failsafe flag */
+			_navigator->get_mission_result()->stay_in_failsafe = false;
+			_navigator->set_mission_result_updated();
+			on_activation();
+
+		} else {
+			/* periodic updates when active */
+			on_active();
+		}
+
+	} else {
+		/* periodic updates when inactive */
+		_first_run = true;
+		on_inactive();
+	}
+}
+    void Mission::update_onboard_mission(){
+	if (orb_copy(ORB_ID(onboard_mission), _navigator->get_onboard_mission_sub(), &_onboard_mission) == OK) {
+		/* accept the current index set by the onboard mission if it is within bounds */
+		if (_onboard_mission.current_seq >= 0
+		    && _onboard_mission.current_seq < (int)_onboard_mission.count) {
+			_current_onboard_mission_index = _onboard_mission.current_seq;
+
+		} else {
+			/* if less WPs available, reset to first WP */
+			if (_current_onboard_mission_index >= (int)_onboard_mission.count) {
+				_current_onboard_mission_index = 0;
+				/* if not initialized, set it to 0 */
+
+			} else if (_current_onboard_mission_index < 0) {
+				_current_onboard_mission_index = 0;
+			}
+
+			/* otherwise, just leave it */
+		}
+
+		// XXX check validity here as well
+		_navigator->get_mission_result()->valid = true;
+		/* reset mission failure if we have an updated valid mission */
+		_navigator->get_mission_result()->mission_failure = false;
+		_navigator->increment_mission_instance_count();
+		_navigator->set_mission_result_updated();
+
+	} else {
+		_onboard_mission.count = 0;
+		_onboard_mission.current_seq = 0;
+		_current_onboard_mission_index = 0;
+	}
+}
+    void Mission::report_do_jump_mission_changed(int index, int do_jumps_remaining) {
+	/* inform about the change */
+	_navigator->get_mission_result()->item_do_jump_changed = true;
+	_navigator->get_mission_result()->item_changed_index = index;
+	_navigator->get_mission_result()->item_do_jump_remaining = do_jumps_remaining;
+	_navigator->set_mission_result_updated();
+}
+    void Mission::set_mission_item_reached() {
+	_navigator->get_mission_result()->reached = true;
+	_navigator->get_mission_result()->seq_reached = _current_offboard_mission_index;
+	_navigator->set_mission_result_updated();
+	reset_mission_item_reached();
+}
+    void Mission::set_current_offboard_mission_item() {
+	_navigator->get_mission_result()->reached = false;
+	_navigator->get_mission_result()->finished = false;
+	_navigator->get_mission_result()->seq_current = _current_offboard_mission_index;
+	_navigator->set_mission_result_updated();
+
+	save_offboard_mission_state();
+}
+    void Mission::set_mission_finished() {
+	_navigator->get_mission_result()->finished = true;
+	_navigator->set_mission_result_updated();
+}
+    void Mission::check_mission_valid(bool force) {
+
+	if ((!_home_inited && _navigator->home_position_valid()) || force) {
+
+		dm_item_t dm_current = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
+
+		_navigator->get_mission_result()->valid =
+			_missionFeasibilityChecker.checkMissionFeasible(
+				_navigator->get_mavlink_log_pub(),
+				(_navigator->get_vstatus()->is_rotary_wing || _navigator->get_vstatus()->is_vtol),
+				dm_current, (size_t) _offboard_mission.count, _navigator->get_geofence(),
+				_navigator->get_home_position()->alt,
+				_navigator->home_position_valid(),
+				_navigator->get_global_position()->lat,
+				_navigator->get_global_position()->lon,
+				_param_dist_1wp.get(),
+				_navigator->get_mission_result()->warning,
+				_navigator->get_default_acceptance_radius(),
+				_navigator->get_land_detected()->landed);
+
+		_navigator->increment_mission_instance_count();
+		_navigator->set_mission_result_updated();
+		_home_inited = _navigator->home_position_valid();
+	}
+}
+//包含set_mission_item_reached()的函数，发现此函数内部包含reset_mission_item_reached()
+void Mission::on_active(){
+	check_mission_valid(false);
+
+	/* check if anything has changed */
+	bool onboard_updated = false;
+	orb_check(_navigator->get_onboard_mission_sub(), &onboard_updated);
+
+	if (onboard_updated) {
+		update_onboard_mission();
+	}
+
+	bool offboard_updated = false;
+	orb_check(_navigator->get_offboard_mission_sub(), &offboard_updated);
+
+	if (offboard_updated) {
+		update_offboard_mission();
+	}
+
+	/* reset the current offboard mission if needed */
+	if (need_to_reset_mission(true)) {
+		reset_offboard_mission(_offboard_mission);
+		update_offboard_mission();
+		offboard_updated = true;
+	}
+
+	/* reset mission items if needed */
+	if (onboard_updated || offboard_updated) {
+		set_mission_items();
+	}
+
+	/* lets check if we reached the current mission item */
+	if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
+		set_mission_item_reached();
+
+		if (_mission_item.autocontinue) {
+			/* switch to next waypoint if 'autocontinue' flag set */
+			advance_mission();
+			set_mission_items();
+		}
+
+	} else if (_mission_type != MISSION_TYPE_NONE && _param_altmode.get() == MISSION_ALTMODE_FOH) {
+		altitude_sp_foh_update();
+
+	} else {
+		/* if waypoint position reached allow loiter on the setpoint */
+		if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
+			_navigator->set_can_loiter_at_sp(true);
+		}
+	}
+
+	/* see if we need to update the current yaw heading */
+	if ((_param_yawmode.get() != MISSION_YAWMODE_NONE
+	     && _param_yawmode.get() < MISSION_YAWMODE_MAX
+	     && _mission_type != MISSION_TYPE_NONE)
+	    || _navigator->get_vstatus()->is_vtol) {
+
+		heading_sp_update();
+	}
+
+	/* check if landing needs to be aborted */
+	if ((_mission_item.nav_cmd == NAV_CMD_LAND)
+	    && (_navigator->abort_landing())) {
+
+		do_abort_landing();
+	}
+
+}
+void Mission::set_mission_items()//这里面是reset……不是set……

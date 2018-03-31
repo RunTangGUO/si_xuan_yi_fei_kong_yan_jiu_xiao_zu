@@ -131,7 +131,7 @@ Mission::need_to_reset_mission(bool active)
 	return false;
 }
 
-void Block::updateParams()
+void Block::updateParams()//什么意思
 {
 	BlockParamBase *param = getParams().getHead();
 	int count = 0;
@@ -359,4 +359,12 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 	/* we have given up, we don't want to cycle forever */
 	mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR DO JUMP is cycling, giving up");
 	return false;
+}
+
+
+void MissionBlock::reset_mission_item_reached() {//经逆序方式找到的函数
+	_waypoint_position_reached = false;
+	_waypoint_yaw_reached = false;
+	_time_first_inside_orbit = 0;
+	_time_wp_reached = 0;
 }

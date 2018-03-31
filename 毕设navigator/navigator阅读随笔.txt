@@ -1,0 +1,17 @@
+1.在namespace中 声明一个Navigator的指针，所有的操作都是针对这个指针，如果不用的话会释放
+2.Navigator::Navigator() :声明一个类？
+3.Navigator::~Navigator()析构一个类
+4.这是C++中 namespace的用法
+namespace navigator
+{
+
+Navigator	*g_navigator;
+}
+5.px4_pollfd_struct_t fds[2] = {};
+
+	/* Setup of loop */
+	fds[0].fd = _global_pos_sub;
+	fds[0].events = POLLIN;
+	fds[1].fd = _vehicle_command_sub;
+	fds[1].events = POLLIN;
+6.vehicle_command会从px4io、output_mavlink、mavlink_receiver、mission_block中publish出来，每走一步都是由navigator规划的么？

@@ -1,0 +1,19 @@
+#ifdef __PX4_NUTTX
+	/* NuttX indicates 3 arguments when only 2 are present */
+	argc -= 1;
+	argv += 1;
+#endif
+
+	if (argc > 2) {
+		if (!strcmp(argv[2],"-hil")) {
+			startup_in_hil = true;
+		} else {
+			PX4_ERR("Argument %s not supported, abort.", argv[2]);
+			thread_should_exit = true;  
+		}
+	}   什么情况？
+sp_man、last_sp_man、stick_change
+armed.lockdown
+pthread_join什么意思
+hotplug_timeout什么意思
+mode_slot

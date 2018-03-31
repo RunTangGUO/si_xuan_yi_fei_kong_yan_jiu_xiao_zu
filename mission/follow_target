@@ -1,0 +1,122 @@
+void MavlinkReceiver::handle_message_follow_target(mavlink_message_t *msg)
+{
+	mavlink_follow_target_t follow_target_msg;
+	follow_target_s follow_target_topic = { };
+
+	mavlink_msg_follow_target_decode(msg, &follow_target_msg);
+
+	follow_target_topic.timestamp = hrt_absolute_time();
+
+	follow_target_topic.lat = follow_target_msg.lat * 1e-7;
+	follow_target_topic.lon = follow_target_msg.lon * 1e-7;
+	follow_target_topic.alt = follow_target_msg.alt;
+
+	if (_follow_target_pub == nullptr) {
+		_follow_target_pub = orb_advertise(ORB_ID(follow_target), &follow_target_topic);
+
+	} else {
+		orb_publish(ORB_ID(follow_target), _follow_target_pub, &follow_target_topic);
+	}
+}
+
+map_projection_init(&target_ref, _previous_target_motion.lat, _previous_target_motion.lon);
+
+			// calculate distance the target has moved
+
+map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon, &(_target_position_delta(0)), &(_target_position_delta(1)));
+
+__EXPORT int map_projection_init(struct map_projection_reference_s *ref, double lat_0,
+				 double lon_0) //lat_0, lon_0 are expected to be in correct format: -> 47.1234567 and not 471234567
+{
+	return map_projection_init_timestamped(ref, lat_0, lon_0, hrt_absolute_time());
+}
+
+__EXPORT int map_projection_init_timestamped(struct map_projection_reference_s *ref, double lat_0, double lon_0,
+		uint64_t timestamp) //lat_0, lon_0 are expected to be in correct format: -> 47.1234567 and not 471234567
+{
+
+	ref->lat_rad = lat_0 * M_DEG_TO_RAD;
+	ref->lon_rad = lon_0 * M_DEG_TO_RAD;
+	ref->sin_lat = sin(ref->lat_rad);
+	ref->cos_lat = cos(ref->lat_rad);
+
+	ref->timestamp = timestamp;
+	ref->init_done = true;
+
+	return 0;
+}
+
+__EXPORT int map_projection_reproject(const struct map_projection_reference_s *ref, float x, float y, double *lat,
+				      double *lon)
+{
+	if (!map_projection_initialized(ref)) {
+		return -1;
+	}
+
+	double x_rad = x / CONSTANTS_RADIUS_OF_EARTH;
+	double y_rad = y / CONSTANTS_RADIUS_OF_EARTH;
+	double c = sqrtf(x_rad * x_rad + y_rad * y_rad);
+	double sin_c = sin(c);
+	double cos_c = cos(c);
+
+	double lat_rad;
+	double lon_rad;
+
+	if (fabs(c) > DBL_EPSILON) {
+		lat_rad = asin(cos_c * ref->sin_lat + (x_rad * sin_c * ref->cos_lat) / c);
+		lon_rad = (ref->lon_rad + atan2(y_rad * sin_c, c * ref->cos_lat * cos_c - x_rad * ref->sin_lat * sin_c));
+
+	} else {
+		lat_rad = ref->lat_rad;//弧度
+		lon_rad = ref->lon_rad;
+	}
+
+	*lat = lat_rad * 180.0 / M_PI;//弧度转度数
+	*lon = lon_rad * 180.0 / M_PI;
+
+	return 0;
+}
+
+/* lat/lon are in radians */
+struct map_projection_reference_s {
+	double lat_rad;
+	double lon_rad;
+	double sin_lat;
+	double cos_lat;
+	bool init_done;
+	uint64_t timestamp;
+};
+
+MavlinkReceiver::handle_message(mavlink_message_t *msg)
+
+struct follow_target_s {
+#endif
+	uint64_t timestamp; // required for logger
+	double lat;
+	double lon;
+	float alt;
+	float vy;
+	float vx;
+	float vz;
+	uint8_t est_cap;
+	uint8_t _padding0[7]; // required for logger
+
+#ifdef __cplusplus
+
+#endif
+};
+
+/**
+ * Dynamic filtering algorithm responsiveness to target movement
+ * lower numbers increase the responsiveness to changing long lat
+ * but also ignore less noise
+ *
+ *动态滤波算法  用于相应低数值增加引起的长维度变化，忽略低噪声
+ *
+ * @unit n/a
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @group Follow target
+ */
+PARAM_DEFINE_FLOAT(NAV_FT_RS, 0.5f);

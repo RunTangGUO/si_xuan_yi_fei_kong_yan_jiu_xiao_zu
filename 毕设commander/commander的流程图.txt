@@ -1,0 +1,37 @@
+初始化标志位与建立commander_low_prio_thread线程（获取所需参数）
+初始化LED与蜂鸣器
+检查uorb应用及订阅所需topics
+飞行前检查
+当!thread_should_exit时进入循环
+  检测更新并处理param
+  检测更新并处理telemetry
+  检测更新并处理sensor_combined
+  检测更新并处理system_power
+  检测更新并处理safety
+  检测更新并处理global_position
+  检测更新并处理local_position
+  检测更新并处理attitude_estimate
+  检测更新并处理cpuload
+  检测更新并处理subsystem
+  检测更新并处理arming_state
+  检测更新并处理gps
+  检测更新并处理mission
+  检测更新并处理geofence
+  检测更新并处理flight_termination
+  检测更新并处理missionresult
+  检测更新并处理param
+  检测更新并处理解锁操作
+  检测更新并处理上锁操作
+  检测更新并处理set_main_state_rc
+  检测更新并处理hrottle_kill_switch
+  检测更新并处理data_link
+  检测更新并处理vehicle_command
+  检测是否需要更新HOME点
+  设定nav_state
+  等待低频率循环的线程完成
+    发布control_mode
+    发布armed
+    发布vehicle status
+跳出循环
+关闭并释放LED与蜂鸣器
+关掉订阅项

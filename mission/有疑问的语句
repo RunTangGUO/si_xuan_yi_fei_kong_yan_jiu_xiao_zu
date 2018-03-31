@@ -21,10 +21,19 @@
 	        prepare2mission发生了什么
 			什么叫DO JUMP
 			_global_position为什么是之前的位置
+			SuperBlock里面有什么
+			task_main_trampoline
 	结论：  copy部分，把数据存到buffer缓存中
 	
 	猜测：  void mission_item_to_position_setpoint(const mission_item_s *item, position_setpoint_s *sp)  此语句将发挥作用
 	        _mission_result_updated设置此参数时mission item可能已经被执行
+			FollowTarget 继承自MissionBlock
     正在进行的工作：   调查perf_begin 
 	                   查看navigator task main
+					   //阅读 MissionBlock
+					   解读mission_item_to_position_setpoint()
+					   查看NavigatorMode其中有什么
+					   //阅读bottle_drop
     疑虑：  如果替换 orb_copy内容，其他trag会不会正常变化
+	如何梳理框架：     navigators是什么：一个类、具备什么功能
+	                   还有

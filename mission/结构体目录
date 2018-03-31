@@ -148,25 +148,38 @@ struct vehicle_status_s {
 #endif
 };
 
-struct mission_item_s {//是可能存储任务的结构体
-	bool altitude_is_relative;	/**< true if altitude is relative from start point	*/
-	double lat;			/**< latitude in degrees				*/
-	double lon;			/**< longitude in degrees				*/
-	float altitude;			/**< altitude in meters	(AMSL)			*/
-	float yaw;			/**< in radians NED -PI..+PI, NAN means don't change yaw		*/
-	float loiter_radius;		/**< loiter radius in meters, 0 for a VTOL to hover     */
-	int8_t loiter_direction;	/**< 1: positive / clockwise, -1, negative.		*/
-	bool loiter_exit_xtrack;	/**< exit xtrack location: 0 for center of loiter wp, 1 for exit location */
-	enum NAV_CMD nav_cmd;		/**< navigation command					*/
-	float acceptance_radius;	/**< default radius in which the mission is accepted as reached in meters */
-	float time_inside;		/**< time that the MAV should stay inside the radius before advancing in seconds */
-	float pitch_min;		/**< minimal pitch angle for fixed wing takeoff waypoints */
-	bool autocontinue;		/**< true if next waypoint should follow after this one */
-	unsigned origin;		/**< where the waypoint has been generated		*/
-	int do_jump_mission_index;	/**< index where the do jump will go to                 */
+struct mission_item_s {             //是可能存储任务的结构体
+	bool altitude_is_relative;	    /**< true if altitude is relative from start point	*/
+	double lat;			             /**< latitude in degrees				*/
+	double lon;			             /**< longitude in degrees				*/
+	float altitude;			         /**< altitude in meters	(AMSL)			*/
+	float yaw;			            /**< in radians NED -PI..+PI, NAN means don't change yaw		*/
+	float loiter_radius;		    /**< loiter radius in meters, 0 for a VTOL to hover     */
+	int8_t loiter_direction;     	/**< 1: positive / clockwise, -1, negative.		*/
+	bool loiter_exit_xtrack;	      /**< exit xtrack location: 0 for center of loiter wp, 1 for exit location */
+	enum NAV_CMD nav_cmd;		      /**< navigation command					*/
+	float acceptance_radius;	      /**< default radius in which the mission is accepted as reached in meters 到达指定位置的绝对误差*/
+	float time_inside;		         /**< time that the MAV should stay inside the radius before advancing in seconds */
+	float pitch_min;		        /**< minimal pitch angle for fixed wing takeoff waypoints */
+	bool autocontinue;		         /**< true if next waypoint should follow after this one 这一个点到达后 自动跟随下一个个点*/
+	unsigned origin;		          /**< where the waypoint has been generated		*/
+	int do_jump_mission_index;	        /**< index where the do jump will go to                 */
 	unsigned do_jump_repeat_count;	/**< how many times do jump needs to be done            */
 	unsigned do_jump_current_count;	/**< count how many times the jump has been done	*/
-	float params[7];		/**< array to store mission command values for MAV_FRAME_MISSION ***/
-	int8_t frame;			/**< mission frame ***/
-	bool force_heading;		/**< heading needs to be reached ***/
+	float params[7];		        /**< array to store mission command values for MAV_FRAME_MISSION MAVLINK框架下存储 任务命令值 的数组***/
+	int8_t frame;			        /**< mission frame ***/
+	bool force_heading;		         /**< heading needs to be reached 无人机的朝向是否需要到达目标位置***/
 };
+
+
+struct mission_s {
+	uint64_t timestamp; // required for logger
+	int32_t dataman_id;
+	uint32_t count;
+	int32_t current_seq;  //现在的序列数
+	uint8_t _padding0[4]; // required for logger
+
+};
+
+//不知道声明后的默认数值是多少，是否为uint32_t的默认数值
+

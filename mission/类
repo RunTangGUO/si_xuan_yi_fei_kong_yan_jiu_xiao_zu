@@ -388,6 +388,8 @@ Navigator::Navigator() :
 	updateParams();
 }}
 
+Navigator类继承自SupperBlock
+
 NavigatorMode::NavigatorMode(Navigator *navigator, const char *name) ://多态继承的NavigatorMode类
 	SuperBlock(navigator, name),
 	_navigator(navigator),
@@ -450,15 +452,3 @@ public:
 	static PX4TopicHandle handle() {return ORB_ID(onboard_mission);}
 };
 
-struct mission_s {
-#endif
-	uint64_t timestamp; // required for logger
-	int32_t dataman_id;
-	uint32_t count;
-	int32_t current_seq;  //现在的序列数
-	uint8_t _padding0[4]; // required for logger
-
-#ifdef __cplusplus
-
-#endif
-};//不知道声明后的默认数值是多少，是否为uint32_t的默认数值

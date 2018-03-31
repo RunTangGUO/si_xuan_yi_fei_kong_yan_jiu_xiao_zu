@@ -1,8 +1,52 @@
 padding
 trampoline
+_param_vtol_wv_land;
+_param_vtol_wv_loiter
+uavcan
+OBC
+position_setpoint_s
+position_setpoint_triplet_s
+MAV_FRAME_MISSION
+mission frame
+vehicle_command_ack
+vehicle_roi
+startup_in_hil
+global_position.eph
+global_position.epv
+gps_position.eph = FLT_MAX;
+gps_position.epv = FLT_MAX;
+(differential_pressure)
+HIL
+vtol
+hotplug sensors
+vtol_status
+
 
 以解决的参数名
     _mc      multicopter
 	_fw      fixedwing
 	radius   猜测为 半径 ；英文还有 有效航程 的释义
 	Retrieve 重新得到
+	clockwise顺时针的
+	cmd      command
+	actuator 作动器？
+	rc       remote control远程遥控
+	daemon app 后台程序
+	status   状态
+	HIL      hardware in the loop simulation   
+	spec     细则
+	termination  终止
+	voltage  电压
+	override 推翻
+	MAV      micro air vehicle 微型飞行器
+	src      源
+	romfs    系统初始化引导文件 ROM File System
+	internal 内部的，内在的
+	sp_man   manual setpoint 手动设置的点
+	ef       engine failed
+	avionics 航电设备
+	first_rc_eval  第一次遥控 evaluate the main state machine
+	Prearm   解锁前检查
+	preflight_check（）  飞行前检查，根据参数设定检查的内容不同
+	arm_disarm（）       解锁，或者上锁
+	ret      result结果

@@ -1,0 +1,14 @@
+vehicle_mode
+vehicle_status
+vehicle_control_mode
+flight_mode_slot
+commander_state_s
+status_flags_s
+
+arming state
+
+battery_status
+
+main_state_transition
+arming_state_transition
+hil_state_transition

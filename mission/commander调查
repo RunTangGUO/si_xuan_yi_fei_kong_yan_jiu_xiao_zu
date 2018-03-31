@@ -1,0 +1,300 @@
+数据类型
+pthread_t
+param_t
+orb_advert_t
+mission_s//一个整个任务，包含任务id，任务航点总数，现在所在航点   dataman可以存储整个任务
+
+
+类
+commander_state_s
+vehicle_status_s
+pthread_attr_t
+
+结构体
+telemetry_status_s
+transition_result_t
+vtol_vehicle_status_s
+
+变量
+status 
+safety
+global_position
+main_res   
+ORB_MULTI_MAX_INSTANCES
+internal_state
+thread_should_exit   //只要它等于true，commander就会关闭
+
+函数
+set_main_state_rc（&status）
+main_state_transition
+handle_command
+
+
+
+
+
+
+// This is a struct used by the commander internally.
+struct status_flags_s {
+	bool condition_calibration_enabled;
+	bool condition_system_sensors_initialized;
+	bool condition_system_prearm_error_reported;	// true if errors have already been reported
+	bool condition_system_hotplug_timeout;		// true if the hotplug sensor search is over
+	bool condition_system_returned_to_home;
+	bool condition_auto_mission_available;
+	bool condition_global_position_valid;		// set to true by the commander app if the quality of the position estimate is good enough to use it for navigation
+	bool condition_home_position_valid;		// indicates a valid home position (a valid home position is not always a valid launch)
+	bool condition_local_position_valid;
+	bool condition_local_altitude_valid;
+	bool condition_airspeed_valid;			// set to true by the commander app if there is a valid airspeed measurement available
+	bool condition_power_input_valid;		// set if input power is valid
+	bool usb_connected;				// status of the USB power supply
+	bool circuit_breaker_engaged_power_check;
+	bool circuit_breaker_engaged_airspd_check;
+	bool circuit_breaker_engaged_enginefailure_check;
+	bool circuit_breaker_engaged_gpsfailure_check;
+	bool circuit_breaker_flight_termination_disabled;
+	bool circuit_breaker_engaged_usb_check;
+	bool offboard_control_signal_found_once;
+	bool offboard_control_signal_lost;
+	bool offboard_control_signal_weak;
+	bool offboard_control_set_by_command;		// true if the offboard mode was set by a mavlink command and should not be overridden by RC
+	bool offboard_control_loss_timeout;		// true if offboard is lost for a certain amount of time
+	bool rc_signal_found_once;
+	bool rc_signal_lost_cmd;			// true if RC lost mode is commanded
+	bool rc_input_blocked;				// set if RC input should be ignored temporarily
+	bool data_link_lost_cmd;			// datalink to GCS lost mode commanded
+	bool vtol_transition_failure;			// Set to true if vtol transition failed
+	bool vtol_transition_failure_cmd;		// Set to true if vtol transition failure mode is commanded
+	bool gps_failure;				// Set to true if a gps failure is detected
+	bool gps_failure_cmd;				// Set to true if a gps failure mode is commanded
+	bool barometer_failure;				// Set to true if a barometer failure is detected
+};
+
+struct vehicle_command_s {
+ 
+	uint64_t timestamp; // required for logger
+	double param5;
+	double param6;
+	float param1;
+	float param2;
+	float param3;
+	float param4;
+	float param7;
+	uint32_t command;
+	uint32_t target_system;
+	uint32_t target_component;
+	uint32_t source_system;
+	uint32_t source_component;
+	uint8_t confirmation;
+	uint8_t _padding0[7]; // required for logger
+
+#ifdef __cplusplus
+	static const uint32_t VEHICLE_CMD_CUSTOM_0 = 0;
+	static const uint32_t VEHICLE_CMD_CUSTOM_1 = 1;
+	static const uint32_t VEHICLE_CMD_CUSTOM_2 = 2;
+	static const uint32_t VEHICLE_CMD_NAV_WAYPOINT = 16;
+	static const uint32_t VEHICLE_CMD_NAV_LOITER_UNLIM = 17;
+	static const uint32_t VEHICLE_CMD_NAV_LOITER_TURNS = 18;
+	static const uint32_t VEHICLE_CMD_NAV_LOITER_TIME = 19;
+	static const uint32_t VEHICLE_CMD_NAV_RETURN_TO_LAUNCH = 20;
+	static const uint32_t VEHICLE_CMD_NAV_LAND = 21;
+	static const uint32_t VEHICLE_CMD_NAV_TAKEOFF = 22;
+	static const uint32_t VEHICLE_CMD_NAV_ROI = 80;
+	static const uint32_t VEHICLE_CMD_NAV_PATHPLANNING = 81;
+	static const uint32_t VEHICLE_CMD_NAV_VTOL_TAKEOFF = 84;
+	static const uint32_t VEHICLE_CMD_NAV_VTOL_LAND = 85;
+	static const uint32_t VEHICLE_CMD_NAV_GUIDED_LIMITS = 90;
+	static const uint32_t VEHICLE_CMD_NAV_GUIDED_MASTER = 91;
+	static const uint32_t VEHICLE_CMD_NAV_GUIDED_ENABLE = 92;
+	static const uint32_t VEHICLE_CMD_NAV_LAST = 95;
+	static const uint32_t VEHICLE_CMD_CONDITION_DELAY = 112;
+	static const uint32_t VEHICLE_CMD_CONDITION_CHANGE_ALT = 113;
+	static const uint32_t VEHICLE_CMD_CONDITION_DISTANCE = 114;
+	static const uint32_t VEHICLE_CMD_CONDITION_YAW = 115;
+	static const uint32_t VEHICLE_CMD_CONDITION_LAST = 159;
+	static const uint32_t VEHICLE_CMD_DO_SET_MODE = 176;
+	static const uint32_t VEHICLE_CMD_DO_JUMP = 177;
+	static const uint32_t VEHICLE_CMD_DO_CHANGE_SPEED = 178;
+	static const uint32_t VEHICLE_CMD_DO_SET_HOME = 179;
+	static const uint32_t VEHICLE_CMD_DO_SET_PARAMETER = 180;
+	static const uint32_t VEHICLE_CMD_DO_SET_RELAY = 181;
+	static const uint32_t VEHICLE_CMD_DO_REPEAT_RELAY = 182;
+	static const uint32_t VEHICLE_CMD_DO_SET_SERVO = 183;
+	static const uint32_t VEHICLE_CMD_DO_REPEAT_SERVO = 184;
+	static const uint32_t VEHICLE_CMD_DO_FLIGHTTERMINATION = 185;
+	static const uint32_t VEHICLE_CMD_DO_GO_AROUND = 191;
+	static const uint32_t VEHICLE_CMD_DO_REPOSITION = 192;
+	static const uint32_t VEHICLE_CMD_DO_PAUSE_CONTINUE = 193;
+	static const uint32_t VEHICLE_CMD_DO_CONTROL_VIDEO = 200;
+	static const uint32_t VEHICLE_CMD_DO_SET_ROI = 201;
+	static const uint32_t VEHICLE_CMD_DO_DIGICAM_CONTROL = 203;
+	static const uint32_t VEHICLE_CMD_DO_MOUNT_CONFIGURE = 204;
+	static const uint32_t VEHICLE_CMD_DO_MOUNT_CONTROL = 205;
+	static const uint32_t VEHICLE_CMD_DO_SET_CAM_TRIGG_DIST = 206;
+	static const uint32_t VEHICLE_CMD_DO_FENCE_ENABLE = 207;
+	static const uint32_t VEHICLE_CMD_DO_PARACHUTE = 208;
+	static const uint32_t VEHICLE_CMD_DO_INVERTED_FLIGHT = 210;
+	static const uint32_t VEHICLE_CMD_DO_MOUNT_CONTROL_QUAT = 220;
+	static const uint32_t VEHICLE_CMD_DO_GUIDED_MASTER = 221;
+	static const uint32_t VEHICLE_CMD_DO_GUIDED_LIMITS = 222;
+	static const uint32_t VEHICLE_CMD_DO_LAST = 240;
+	static const uint32_t VEHICLE_CMD_PREFLIGHT_CALIBRATION = 241;
+	static const uint32_t VEHICLE_CMD_PREFLIGHT_SET_SENSOR_OFFSETS = 242;
+	static const uint32_t VEHICLE_CMD_PREFLIGHT_STORAGE = 245;
+	static const uint32_t VEHICLE_CMD_PREFLIGHT_REBOOT_SHUTDOWN = 246;
+	static const uint32_t VEHICLE_CMD_OVERRIDE_GOTO = 252;
+	static const uint32_t VEHICLE_CMD_MISSION_START = 300;
+	static const uint32_t VEHICLE_CMD_COMPONENT_ARM_DISARM = 400;
+	static const uint32_t VEHICLE_CMD_START_RX_PAIR = 500;
+	static const uint32_t VEHICLE_CMD_DO_TRIGGER_CONTROL = 2003;
+	static const uint32_t VEHICLE_CMD_DO_VTOL_TRANSITION = 3000;
+	static const uint32_t VEHICLE_CMD_PAYLOAD_PREPARE_DEPLOY = 30001;
+	static const uint32_t VEHICLE_CMD_PAYLOAD_CONTROL_DEPLOY = 30002;
+	static const uint32_t VEHICLE_CMD_PREFLIGHT_UAVCAN = 243;
+	static const uint32_t VEHICLE_CMD_RESULT_ACCEPTED = 0;
+	static const uint32_t VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED = 1;
+	static const uint32_t VEHICLE_CMD_RESULT_DENIED = 2;
+	static const uint32_t VEHICLE_CMD_RESULT_UNSUPPORTED = 3;
+	static const uint32_t VEHICLE_CMD_RESULT_FAILED = 4;
+	static const uint32_t VEHICLE_CMD_RESULT_ENUM_END = 5;
+	static const uint32_t VEHICLE_MOUNT_MODE_RETRACT = 0;
+	static const uint32_t VEHICLE_MOUNT_MODE_NEUTRAL = 1;
+	static const uint32_t VEHICLE_MOUNT_MODE_MAVLINK_TARGETING = 2;
+	static const uint32_t VEHICLE_MOUNT_MODE_RC_TARGETING = 3;
+	static const uint32_t VEHICLE_MOUNT_MODE_GPS_POINT = 4;
+	static const uint32_t VEHICLE_MOUNT_MODE_ENUM_END = 5;
+	static const uint32_t VEHICLE_ROI_NONE = 0;
+	static const uint32_t VEHICLE_ROI_WPNEXT = 1;
+	static const uint32_t VEHICLE_ROI_WPINDEX = 2;
+	static const uint32_t VEHICLE_ROI_LOCATION = 3;
+	static const uint32_t VEHICLE_ROI_TARGET = 4;
+	static const uint32_t VEHICLE_ROI_ENUM_END = 5;
+	static const uint32_t ORB_QUEUE_LENGTH = 3;
+
+#endif
+};
+
+struct vehicle_status_s {
+	uint64_t timestamp; // required for logger
+	uint32_t system_id;
+	uint32_t component_id;
+	uint32_t onboard_control_sensors_present;
+	uint32_t onboard_control_sensors_enabled;
+	uint32_t onboard_control_sensors_health;
+	uint8_t nav_state;
+	uint8_t arming_state;
+	uint8_t hil_state;
+	bool failsafe;
+	uint8_t system_type;
+	bool is_rotary_wing;
+	bool is_vtol;
+	bool vtol_fw_permanent_stab;
+	bool in_transition_mode;
+	bool rc_signal_lost;
+	uint8_t rc_input_mode;
+	bool data_link_lost;
+	uint8_t data_link_lost_counter;
+	bool engine_failure;
+	bool engine_failure_cmd;
+	bool mission_failure;
+	uint8_t _padding0[4]; // required for logger
+
+#ifdef __cplusplus
+	static const uint8_t ARMING_STATE_INIT = 0;
+	static const uint8_t ARMING_STATE_STANDBY = 1;
+	static const uint8_t ARMING_STATE_ARMED = 2;
+	static const uint8_t ARMING_STATE_ARMED_ERROR = 3;
+	static const uint8_t ARMING_STATE_STANDBY_ERROR = 4;
+	static const uint8_t ARMING_STATE_REBOOT = 5;
+	static const uint8_t ARMING_STATE_IN_AIR_RESTORE = 6;
+	static const uint8_t ARMING_STATE_MAX = 7;
+	static const uint8_t HIL_STATE_OFF = 0;
+	static const uint8_t HIL_STATE_ON = 1;
+	static const uint8_t NAVIGATION_STATE_MANUAL = 0;
+	static const uint8_t NAVIGATION_STATE_ALTCTL = 1;
+	static const uint8_t NAVIGATION_STATE_POSCTL = 2;
+	static const uint8_t NAVIGATION_STATE_AUTO_MISSION = 3;
+	static const uint8_t NAVIGATION_STATE_AUTO_LOITER = 4;
+	static const uint8_t NAVIGATION_STATE_AUTO_RTL = 5;
+	static const uint8_t NAVIGATION_STATE_AUTO_RCRECOVER = 6;
+	static const uint8_t NAVIGATION_STATE_AUTO_RTGS = 7;
+	static const uint8_t NAVIGATION_STATE_AUTO_LANDENGFAIL = 8;
+	static const uint8_t NAVIGATION_STATE_AUTO_LANDGPSFAIL = 9;
+	static const uint8_t NAVIGATION_STATE_ACRO = 10;
+	static const uint8_t NAVIGATION_STATE_UNUSED = 11;
+	static const uint8_t NAVIGATION_STATE_DESCEND = 12;
+	static const uint8_t NAVIGATION_STATE_TERMINATION = 13;
+	static const uint8_t NAVIGATION_STATE_OFFBOARD = 14;
+	static const uint8_t NAVIGATION_STATE_STAB = 15;
+	static const uint8_t NAVIGATION_STATE_RATTITUDE = 16;
+	static const uint8_t NAVIGATION_STATE_AUTO_TAKEOFF = 17;
+	static const uint8_t NAVIGATION_STATE_AUTO_LAND = 18;
+	static const uint8_t NAVIGATION_STATE_AUTO_FOLLOW_TARGET = 19;
+	static const uint8_t NAVIGATION_STATE_MAX = 20;
+	static const uint8_t RC_IN_MODE_DEFAULT = 0;
+	static const uint8_t RC_IN_MODE_OFF = 1;
+	static const uint8_t RC_IN_MODE_GENERATED = 2;
+
+#endif
+};
+
+struct commander_state_s {
+	uint64_t timestamp; // required for logger
+	uint8_t main_state;
+	uint8_t _padding0[7]; // required for logger
+
+#ifdef __cplusplus
+	static const uint8_t MAIN_STATE_MANUAL = 0;
+	static const uint8_t MAIN_STATE_ALTCTL = 1;
+	static const uint8_t MAIN_STATE_POSCTL = 2;
+	static const uint8_t MAIN_STATE_AUTO_MISSION = 3;
+	static const uint8_t MAIN_STATE_AUTO_LOITER = 4;
+	static const uint8_t MAIN_STATE_AUTO_RTL = 5;
+	static const uint8_t MAIN_STATE_ACRO = 6;
+	static const uint8_t MAIN_STATE_OFFBOARD = 7;
+	static const uint8_t MAIN_STATE_STAB = 8;
+	static const uint8_t MAIN_STATE_RATTITUDE = 9;
+	static const uint8_t MAIN_STATE_AUTO_TAKEOFF = 10;
+	static const uint8_t MAIN_STATE_AUTO_LAND = 11;
+	static const uint8_t MAIN_STATE_AUTO_FOLLOW_TARGET = 12;
+	static const uint8_t MAIN_STATE_MAX = 13;
+
+#endif
+};
+
+Commander::Commander() :
+{	_n(),
+	_man_ctrl_sp_sub(_n.subscribe("manual_control_setpoint", 10, &Commander::ManualControlInputCallback, this)),
+	_offboard_control_mode_sub(_n.subscribe("offboard_control_mode", 10, &Commander::OffboardControlModeCallback, this)),
+	_vehicle_control_mode_pub(_n.advertise<px4::vehicle_control_mode>("vehicle_control_mode", 10)),
+	_actuator_armed_pub(_n.advertise<px4::actuator_armed>("actuator_armed", 10)),
+	_vehicle_status_pub(_n.advertise<px4::vehicle_status>("vehicle_status", 10)),
+	_commander_state_pub(_n.advertise<px4::commander_state>("commander_state", 10)),
+	_parameter_update_pub(_n.advertise<px4::parameter_update>("parameter_update", 10)),
+	_msg_parameter_update(),
+	_msg_actuator_armed(),
+	_msg_vehicle_control_mode(),
+	_msg_vehicle_status(),
+	_msg_offboard_control_mode(),
+	_got_manual_control(false)
+{
+
+	/* Default to offboard control: when no joystick is connected offboard control should just work */
+
+}}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
