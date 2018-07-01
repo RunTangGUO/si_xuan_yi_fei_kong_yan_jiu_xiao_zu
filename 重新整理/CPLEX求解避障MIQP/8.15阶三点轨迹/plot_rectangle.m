@@ -1,0 +1,17 @@
+O=[2 6 0];
+lx=1;
+ly=2;
+lz=5;
+a=[0 lx lx 0  0 0  0  0  0 0  0  lx lx lx lx lx lx lx 0];
+b=[0 0  0  0  0 0  ly ly 0 ly ly ly ly 0  0  ly ly ly ly];
+c=[0 0  lz lz 0 lz lz 0  0 0  lz lz 0  0  lz lz 0  0  0];
+plot3(a+O(1),b+O(2),c+O(3),'k');
+hold on;fill3([0+O(1) 0+O(1) 0+O(1) 0+O(1) ],[0+O(2) ly+O(2) ly+O(2) 0+O(2)],[0+O(3) 0+O(3) lz+O(3) lz+O(3)],[1 0.8549 0.72549]);
+hold on;fill3([0+O(1) 0+O(1) lx+O(1) lx+O(1) ],[ly+O(2) ly+O(2) ly+O(2) ly+O(2)],[0+O(3) lz+O(3) lz+O(3) 0+O(3)],[1 0.8549 0.72549]);
+hold on;fill3([lx+O(1) lx+O(1) lx+O(1) lx+O(1) ],[ly+O(2) ly+O(2) 0+O(2) 0+O(2)],[0+O(3) lz+O(3) lz+O(3) 0+O(3)],[1 0.8549 0.72549]);
+hold on;fill3([0+O(1) 0+O(1) lx+O(1) lx+O(1) ],[0+O(2) 0+O(2) 0+O(2) 0+O(2)],[0+O(3) lz+O(3) lz+O(3) 0+O(3)],[1 0.8549 0.72549]);
+hold on;fill3([0+O(1) 0+O(1) lx+O(1) lx+O(1) ],[0+O(2) ly+O(2) ly+O(2) 0+O(2)],[lz+O(3) lz+O(3) lz+O(3) lz+O(3)],[1 0.8549 0.72549]);
+hold on;fill3([0+O(1) 0+O(1) lx+O(1) lx+O(1) ],[0+O(2) ly+O(2) ly+O(2) 0+O(2)],[0+O(3) 0+O(3) 0+O(3) 0+O(3)],[1 0.8549 0.72549]);
+xlabel('X÷·');
+ylabel('Y÷·');
+zlabel('Z÷·');
