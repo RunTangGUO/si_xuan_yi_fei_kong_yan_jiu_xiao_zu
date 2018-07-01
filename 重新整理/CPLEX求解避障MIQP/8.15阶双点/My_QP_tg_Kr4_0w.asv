@@ -49,22 +49,29 @@ dz10=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),1),x,0);
 dz20=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),2),x,0);
 dz30=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),3),x,0);
 dz40=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),4),x,0);
-dx11=limit(diff(subs(rT1(1,1),{'T0','T1'},{0,1}),1),x,1);
-dx21=limit(diff(subs(rT1(1,1),{'T0','T1'},{0,1}),2),x,1);
-dx31=limit(diff(subs(rT1(1,1),{'T0','T1'},{0,1}),3),x,1);
-dx41=limit(diff(subs(rT1(1,1),{'T0','T1'},{0,1}),4),x,1);
-dy11=limit(diff(subs(rT1(2,1),{'T0','T1'},{0,1}),1),x,1);
-dy21=limit(diff(subs(rT1(2,1),{'T0','T1'},{0,1}),2),x,1);
-dy31=limit(diff(subs(rT1(2,1),{'T0','T1'},{0,1}),3),x,1);
-dy41=limit(diff(subs(rT1(2,1),{'T0','T1'},{0,1}),4),x,1);
-dz11=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),1),x,1);
-dz21=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),2),x,1);
-dz31=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),3),x,1);
-dz41=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),4),x,1);
+dx11=limit(diff(subs(rT2(1,1),{'T1','T2'},{1,2}),1),x,2);
+dx21=limit(diff(subs(rT2(1,1),{'T1','T2'},{1,2}),2),x,2);
+dx32=limit(diff(subs(rT2(1,1),{'T1','T2'},{1,2}),3),x,2);
+dx42=limit(diff(subs(rT2(1,1),{'T1','T2'},{1,2}),4),x,2);
+dy12=limit(diff(subs(rT2(2,1),{'T1','T2'},{1,2}),1),x,2);
+dy22=limit(diff(subs(rT2(2,1),{'T1','T2'},{1,2}),2),x,2);
+dy32=limit(diff(subs(rT2(2,1),{'T1','T2'},{1,2}),3),x,2);
+dy42=limit(diff(subs(rT2(2,1),{'T1','T2'},{1,2}),4),x,2);
+dz12=limit(diff(subs(rT2(3,1),{'T1','T2'},{1,2}),1),x,2);
+dz22=limit(diff(subs(rT2(3,1),{'T1','T2'},{1,2}),2),x,2);
+dz32=limit(diff(subs(rT2(3,1),{'T1','T2'},{1,2}),3),x,2);
+dz42=limit(diff(subs(rT2(3,1),{'T1','T2'},{1,2}),4),x,2);
+%转折点处导数连续
+dx1x2=limit(diff(subs(rT1(1,1),{'T0','T1'},{0,1}),1),x,1)-limit(diff(subs(rT2(1,1),{'T1','T2'},{1,2}),1),x,1);
+dy1y2=limit(diff(subs(rT1(2,1),{'T0','T1'},{0,1}),1),x,1)-limit(diff(subs(rT2(2,1),{'T1','T2'},{1,2}),1),x,1);
+dz1z2=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),1),x,1)-limit(diff(subs(rT2(3,1),{'T1','T2'},{1,2}),1),x,1);
 Q=sym(zeros(54));
 rTpL=[x11 x12 x13 x14 x15 x16 x17 x18 x19 x110 x111 x112 x113 x114 x115,...
      y11 y12 y13 y14 y15 y16 y17 y18 y19 y110 y111 y112 y113 y114 y115,...
-     z11 z12 z13 z14 z15 z16 z17 z18 z19 z110 z111 z112 z113 z114 z115];
+     z11 z12 z13 z14 z15 z16 z17 z18 z19 z110 z111 z112 z113 z114 z115,...
+     x21 x22 x23 x24 x25 x26 x27 x28 x29 x210 x211 x212 x213 x214 x215,...
+     y21 y22 y23 y24 y25 y26 y27 y28 y29 y210 y211 y212 y213 y214 y215,...
+     z21 z22 z23 z24 z25 z26 z27 z28 z29 z210 z211 z212 z213 z214 z215];
  for i=1:1:90
      for j=1:1:i
          if i==j
@@ -91,10 +98,10 @@ rTpL=[x11 x12 x13 x14 x15 x16 x17 x18 x19 x110 x111 x112 x113 x114 x115,...
      end
      H(1,i)=subs(H(1,i)-rTpL(1,i)^2*Q(i,i)/2,rTpL(1,i),1);
  end
-STP=[rT10x rT10y rT10z rT11x rT11y rT11z dx11 dx21 dx31 dx41 dy11 dy21 dy31 dy41 dz11 dz21 dz31 dz41 dx12 dx22 dx32 dx42 dy12 dy22 dy32 dy42 dz12 dz22 dz32 dz42];
-STA=[0 0 0 1 2 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-coefficient=sym(zeros(30,90));
-for i=1:1:30
+STP=[rT10x rT10y rT10z rT11x rT11y rT11z rT21x rT21y rT21z rT22x rT22y rT22z dx11 dx21 dx31 dx41 dy11 dy21 dy31 dy41 dz11 dz21 dz31 dz41 dx12 dx22 dx32 dx42 dy12 dy22 dy32 dy42 dz12 dz22 dz32 dz42 dx1x2 dy1y2 dz1z2];
+STA=[0 0 0 1 2 3 1 2 3 7 1 9 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
+coefficient=sym(zeros(36,90));
+for i=1:1:12
     parfor j=1:1:90
         coefficient(i,j)=STP(i);
         for k=1:1:90
@@ -105,16 +112,16 @@ for i=1:1:30
         coefficient(i,j)=coefficient(i,j)/rTpL(j);
     end
 end
-% %逐位计算等式约束中的系数矩阵
-% for i=13:1:39
-%     parfor j=1:1:90
-%         coefficient(i,j)=STP(i);
-%         for k=1:1:90
-%             if k~=j
-%                 coefficient(i,j)=subs(coefficient(i,j),rTpL(k),0);
-%             end
-%         end
-%         coefficient(i,j)=coefficient(i,j)/rTpL(j);
-%     end
-% end
+%逐位计算等式约束中的系数矩阵
+for i=13:1:39
+    parfor j=1:1:90
+        coefficient(i,j)=STP(i);
+        for k=1:1:90
+            if k~=j
+                coefficient(i,j)=subs(coefficient(i,j),rTpL(k),0);
+            end
+        end
+        coefficient(i,j)=coefficient(i,j)/rTpL(j);
+    end
+end
 save QP_model
