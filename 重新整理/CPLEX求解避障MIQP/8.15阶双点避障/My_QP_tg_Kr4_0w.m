@@ -19,10 +19,7 @@ syms y11;syms y12;syms y13;syms y14;syms y15;syms y16;syms y17;syms y18;syms y19
 syms z11;syms z12;syms z13;syms z14;syms z15;syms z16;syms z17;syms z18;syms z19;syms z110;syms z111;syms z112;syms z113;syms z114;syms z115;
 rTp=[x11 x12 x13 x14 x15 x16 x17 x18 x19 x110 x111 x112 x113 x114 x115;...
      y11 y12 y13 y14 y15 y16 y17 y18 y19 y110 y111 y112 y113 y114 y115;...
-     z11 z12 z13 z14 z15 z16 z17 z18 z19 z110 z111 z112 z113 z114 z115;...
-     x21 x22 x23 x24 x25 x26 x27 x28 x29 x210 x211 x212 x213 x214 x215;...
-     y21 y22 y23 y24 y25 y26 y27 y28 y29 y210 y211 y212 y213 y214 y215;...
-     z21 z22 z23 z24 z25 z26 z27 z28 z29 z210 z211 z212 z213 z214 z215];
+     z11 z12 z13 z14 z15 z16 z17 z18 z19 z110 z111 z112 z113 z114 z115];
 rT1=sym(zeros(3,1));
 for i=1:1:15
     rT1(1,1)=rT1(1,1)+rTp(1,i)*p(i,1);
@@ -61,15 +58,15 @@ dz11=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),1),x,1);
 dz21=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),2),x,1);
 dz31=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),3),x,1);
 dz41=limit(diff(subs(rT1(3,1),{'T0','T1'},{0,1}),4),x,1);
-Q=sym(zeros(54));
+Q=sym(zeros(45));
 rTpL=[x11 x12 x13 x14 x15 x16 x17 x18 x19 x110 x111 x112 x113 x114 x115,...
      y11 y12 y13 y14 y15 y16 y17 y18 y19 y110 y111 y112 y113 y114 y115,...
      z11 z12 z13 z14 z15 z16 z17 z18 z19 z110 z111 z112 z113 z114 z115];
- for i=1:1:90
+ for i=1:1:45
      for j=1:1:i
          if i==j
              Q(i,i)=min;
-             for k=1:1:90
+             for k=1:1:45
                  if k~=i
                      Q(i,i)=subs(Q(i,i),rTpL(k),0);
                  end
@@ -81,23 +78,23 @@ rTpL=[x11 x12 x13 x14 x15 x16 x17 x18 x19 x110 x111 x112 x113 x114 x115,...
          end
      end
  end
- H=sym(zeros(1,54));
- parfor i=1:1:90
+ H=sym(zeros(1,45));
+ parfor i=1:1:45
      H(1,i)=min;
-     for j=1:1:90
+     for j=1:1:45
          if j~=i
              H(1,i)=subs(H(1,i),rTpL(1,j),0);
          end
      end
      H(1,i)=subs(H(1,i)-rTpL(1,i)^2*Q(i,i)/2,rTpL(1,i),1);
  end
-STP=[rT10x rT10y rT10z rT11x rT11y rT11z dx11 dx21 dx31 dx41 dy11 dy21 dy31 dy41 dz11 dz21 dz31 dz41 dx12 dx22 dx32 dx42 dy12 dy22 dy32 dy42 dz12 dz22 dz32 dz42];
+STP=[rT10x rT10y rT10z rT11x rT11y rT11z dx10 dx20 dx30 dx40 dy10 dy20 dy30 dy40 dz10 dz20 dz30 dz40 dx11 dx21 dx31 dx41 dy11 dy21 dy31 dy41 dz11 dz21 dz31 dz41];
 STA=[0 0 0 1 2 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0];
-coefficient=sym(zeros(30,90));
+coefficient=sym(zeros(30,45));
 for i=1:1:30
-    parfor j=1:1:90
+    parfor j=1:1:45
         coefficient(i,j)=STP(i);
-        for k=1:1:90
+        for k=1:1:45
             if k~=j
                 coefficient(i,j)=subs(coefficient(i,j),rTpL(k),0);
             end
