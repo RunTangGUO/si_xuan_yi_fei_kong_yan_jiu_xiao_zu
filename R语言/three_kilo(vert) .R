@@ -1,0 +1,35 @@
+library(ggplot2)
+library(dplyr)
+library(openxlsx)
+timeHMS_formatter<-function(x){
+    h<-floor(x/3600)
+    m<-floor((x/60)%%60)
+    s<-round(x%%60)
+    lab<-sprintf("%02d:%02d:%02d",h,m,s)
+    lab<-sub("^00:","",lab)
+    lab<-sub("^0","",lab)
+    return(lab)
+}
+test1<-read.xlsx("D:/2.xlsx",1)
+test2<-read.xlsx("D:/2.xlsx",2)
+test3<-read.xlsx("D:/2.xlsx",3)
+test4<-read.xlsx("D:/2.xlsx",4)
+test5<-read.xlsx("D:/2.xlsx",5)
+test<-merge(test1,test2,all=TRUE)
+test<-merge(test,test3,all=TRUE)
+test<-merge(test,test4,all=TRUE)
+test<-merge(test,test5,all=TRUE)
+test_tk<-subset(test,test$tk>0)
+test_tk_absent<-subset(test,is.na(test$tk))
+test_tk$lg[test_tk$tk<=14.2]<-"NL"
+test_tk$lg[test_tk$tk>14.2]<-"AL"
+tk_qualified<-paste("合格人数:",sum(test_tk=="NL"))
+tk_unqualified<-paste("不合格人数:",sum(test_tk=="AL"))
+tk_absent<-paste("缺考人数：",length(subset(test,is.na(test$tk))$name))
+test_tk$r_f<-(test_tk$tk%/%1)*60
+test_tk$r_g<-(test_tk$tk%%1)*100
+test_tk$r<-test_tk$r_f+test_tk$r_g
+p<-ggplot(test_tk,aes(y=reorder(name,tk,desc),x=r))+geom_point(size=3,aes(colour=lg))+geom_segment(aes(yend=name),xend=0,colour="grey50")+scale_colour_brewer(palette="Set1")+xlab("")+ylab("")
+q<-p+theme(panel.grid.major.y=element_blank(),panel.grid.minor.y=element_blank(),legend.position=c(.8,.8),legend.background=element_rect(fill="white",colour="black"))
+q+scale_x_continuous(breaks=c(660,720,780,840,900,960,1020,1080,1140,1200,1260),labels=c("11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"))+scale_colour_hue("组别",breaks=c("NL","AL"),labels=c("合格人员","不合格人员"))+annotate("text",y=37,x=19*60,label=tk_qualified,size=4)+annotate("text",y=35.5,x=19*60,label=tk_unqualified,size=4)+annotate("text",y=34,x=19*60,label=tk_absent,size=4)+geom_vline(xintercept=14*60+20,linetype="dashed")
+#+annotate("text",y=21*60,label="三公里成绩",size=8,x=26)+coord_fixed(ratio=(1260*2.7)/51)

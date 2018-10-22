@@ -1,0 +1,37 @@
+library(ggplot2)
+library(dplyr)
+library(openxlsx)
+timeHMS_formatter<-function(x){
+    h<-floor(x/3600)
+    m<-floor((x/60)%%60)
+    s<-round(x%%60)
+    lab<-sprintf("%02d:%02d:%02d",h,m,s)
+    lab<-sub("^00:","",lab)
+    lab<-sub("^0","",lab)
+    return(lab)
+}
+test1<-read.xlsx("D:/2.xlsx",1)
+test2<-read.xlsx("D:/2.xlsx",2)
+test3<-read.xlsx("D:/2.xlsx",3)
+test4<-read.xlsx("D:/2.xlsx",4)
+test5<-read.xlsx("D:/2.xlsx",5)
+test<-merge(test1,test2,all=TRUE)
+test<-merge(test,test3,all=TRUE)
+test<-merge(test,test4,all=TRUE)
+test<-merge(test,test5,all=TRUE)
+test_hb<-subset(test,test$hb>=0)
+test_hb_absent<-subset(test,is.na(test$hb))
+test_hb$lg[test_hb$hb>=12]<-heat.colors(7)[1]
+test_hb$lg[test_hb$hb>=9&test_hb$hb<12]<-heat.colors(7)[3]
+test_hb$lg[test_hb$hb>=6&test_hb$hb<9]<-heat.colors(7)[4]
+test_hb$lg[test_hb$hb<6]<-heat.colors(7)[5]
+o<-order(test_hb[,"hb"])
+test_hb<-test_hb[o,]
+#hb_qualified<-paste("合格人数:",sum(test_hb==#FF6600FF|test_hb==#FF9900FF|test_hb==#FF0000FF)
+#hb_unqualified<-paste("不合格人数:",sum(test_hb==#FFCC00FF))
+#hb_absent<-paste("缺考人数：",length(subset(test,is.na(test$hb))$name))
+p<-ggplot(test_hb,aes(x=reorder(name,hb),y=hb,fill=test_hb$lg))+geom_bar(stat="identity")+coord_flip()+xlab("")+ylab("")+theme(panel.grid.major.y=element_blank(),panel.grid.minor.y=element_blank(),panel.grid.minor.x=element_blank(),legend.position=c(.8,.4),legend.background=element_rect(fill="white",colour="black"))+scale_y_continuous(breaks=seq(0,20,by=1))+labs(fill="组别")+scale_fill_discrete(labels=c("优秀","良好","合格","不合格"))+geom_hline(yintercept=12,linetype="dashed")+geom_hline(yintercept=9,linetype="dashed")+geom_hline(yintercept=6,linetype="dashed")#+annotate("text",y=12.5,x=17,label=hb_qualified,size=4)+annotate("text",y=12.5,x=16,label=hb_unqualified,size=4)+annotate("text",y=12.5,x=14,label=hb_absent,size=4)
+p
+#p<-ggplot(test_tk,aes(x=reorder(name,tk),y=r))+geom_point(size=3,aes(colour=lg))+geom_segment(aes(xend=name),yend=0,colour="grey50")+scale_colour_brewer(palette="Set1")+xlab("")+ylab("")
+#q<-p+theme(axis.text.x=element_text(angle=60,hjust=1,size=12),panel.grid.major.x=element_blank(),panel.grid.minor.x=element_blank(),panel.grid.minor.y=element_blank(),legend.position=c(.06,.8),legend.background=element_rect(fill="white",colour="black"))
+#q+scale_y_continuous(breaks=c(660,720,780,840,900,960,1020,1080,1140,1200,1260),labels=c("11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"))+annotate("text",y=21*60,label="三公里成绩",size=8,x=26)+scale_colour_hue("组别",breaks=c("NL","AL"),labels=c("合格人员","不合格人员"))+annotate("text",x=3.5,y=17.5*60,label=tk_qualified,size=4)+annotate("text",x=3.5,y=17*60,label=tk_unqualified,size=4)+annotate("text",x=3.5,y=16.5*60,label=tk_absent,size=4)+geom_hline(yintercept=14*60+20,linetype="dashed")+coord_fixed(ratio=51/(1260*2.7))
